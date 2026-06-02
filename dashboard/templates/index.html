@@ -133,7 +133,8 @@
         <button class="nav-tab active" onclick="switchTab('dashboard')">Dashboard</button>
         <button class="nav-tab" onclick="switchTab('analyze')">Analyze</button>
  <button class="nav-tab" onclick="switchTab('alerts')">Alerts <span id="alertBadge" style="display:none; background:var(--accent-red); color:white; border-radius:50%; padding:1px 6px; font-size:10px; margin-left:4px;"></span></button>
-    <button class="nav-tab" onclick="switchTab('watchlist')">Watchlist <span id="wlBadge" style="display:none; background:var(--accent-blue); color:white; border-radius:50%; padding:1px 6px; font-size:10px; margin-left:4px;"></span></button>
+ <button class="nav-tab" onclick="switchTab('signals')">Signals Grid</button>
+ <button class="nav-tab" onclick="switchTab('watchlist')">Watchlist <span id="wlBadge" style="display:none; background:var(--accent-blue); color:white; border-radius:50%; padding:1px 6px; font-size:10px; margin-left:4px;"></span></button>
         <button class="nav-tab" onclick="switchTab('history')">History</button>
         <button class="nav-tab" onclick="switchTab('eval')">Market Eval</button>
         	<button class="nav-tab" onclick="switchTab('health')">Health</button>
@@ -189,6 +190,23 @@
                 <button class="btn btn-sm btn-primary" onclick="loadAlertFeed()" title="Force refresh">&#x1F504; Refresh</button>
             </div>
             <div id="alertFeed" class="alert-feed"><div class="loading">Loading alerts...</div></div>
+        </section>
+        <!-- Signals Grid Tab -->
+        <section id="signals" class="tab-content">
+            <h2 class="section-title">&#x1F4A1; Unified Signal Grid</h2>
+            <div class="alert-filters" style="margin-bottom:15px;">
+                <button class="filter-btn active" onclick="setSignalFilter('signal','all')">All Signals</button>
+                <button class="filter-btn" onclick="setSignalFilter('signal','BUY')">&#x2B06; Buy</button>
+                <button class="filter-btn" onclick="setSignalFilter('signal','STRONG_BUY')">&#x25B2; Strong Buy</button>
+                <button class="filter-btn" onclick="setSignalFilter('signal','SELL')">&#x25BC; Sell</button>
+                <button class="filter-btn" onclick="setSignalFilter('signal','STRONG_SELL')">&#x25BD; Strong Sell</button>
+                <button class="filter-btn" onclick="setSignalFilter('signal','NEUTRAL')">&#x26AF; Neutral</button>
+                <span style="flex:1"></span>
+                <input type="text" class="search-input" id="signalSymbolFilter" placeholder="Filter symbol..." style="max-width:150px;padding:6px 12px;font-size:12px;" onkeyup="if(event.key==='Enter') loadSignalsGrid()">
+                <button class="btn btn-sm btn-primary" onclick="loadSignalsGrid()">&#x1F504; Refresh</button>
+            </div>
+            <div id="signalsCount" style="color:var(--text-secondary);font-size:13px;margin-bottom:12px;"></div>
+            <div id="signalsGrid" class="grid"></div>
         </section>
         <section id="watchlist" class="tab-content">
             <h2 class="section-title">&#x1F3AF; My Watchlist</h2>
@@ -300,6 +318,110 @@ function getSentimentClass(sentiment) {
     return 'neutral';
 }
 
+// === SIGNALS GRID STATE ===
+let signalFilter = { signal: 'all', symbol: '' };
+
+function setSignalFilter(key, value) {
+    signalFilter[key] = value;
+    // Update button states
+    document.querySelectorAll('#signals .filter-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.target.classList.add('active');
+    loadSignalsGrid();
+}
+
+function loadSignalsGrid() {
+    const gridDiv = document.getElementById('signalsGrid');
+    const countDiv = document.getElementById('signalsCount');
+    if (!gridDiv) return;
+    
+    let url = '/api/signals?';
+    if (signalFilter.signal !== 'all') url += 'signal=' + encodeURIComponent(signalFilter.signal) + '&';
+    if (signalFilter.symbol) url += 'symbol=' + encodeURIComponent(signalFilter.symbol);
+    
+    gridDiv.innerHTML = '<div class="loading">&#x1F504; Loading signals...</div>';
+    
+    fetch(url).then(r => r.json()).then(data => {
+        const signals = data.signals || [];
+        
+        if (countDiv) {
+            countDiv.textContent = signals.length + ' signal(s) loaded — Sources: ' + 
+                (data.counts ? ('signals_log=' + (data.counts.by_source?.signals_log||0) + ', trading_alerts=' + (data.counts.by_source?.trading_alerts||0)) : '');
+        }
+        
+        if (signals.length === 0) {
+            gridDiv.innerHTML = '<div class="loading" style="padding:40px;text-align:center;">No signals yet. Run auto-scan to generate trading signals.</div>';
+            return;
+        }
+        
+        let html = '';
+        signals.forEach(sig => {
+            const stype = (sig.signal_type || '').toUpperCase();
+            const severity = (sig.severity || 'MEDIUM').toLowerCase();
+            
+            // Color coding based on signal type and severity
+            let borderColor = 'var(--accent-blue)';
+            if (stype.includes('BUY')) borderColor = 'var(--accent-green)';
+            else if (stype.includes('SELL')) borderColor = 'var(--accent-red)';
+            else if (stype.includes('NEUTRAL') || stype === 'HOLD') borderColor = '#f0c040';
+            
+            let severityColor = '#58a6ff'; // default
+            try { severityColor = {'low':'var(--text-secondary)','medium': 'var(--accent-blue)','high':'#ff9500','critical':'var(--accent-red)'}[severity]; } catch(e){}
+            
+            const timeStr = sig.timestamp || sig.detected_at || '';
+            let timeDisplay = 'N/A';
+            try { if(timeStr) { const d = new Date(timeStr); timeDisplay = d.toLocaleString('vi-VN'); }} catch(e){}
+            
+            // Build details
+            let detHtml = '';
+            const price = sig.price || (sig.details_parsed && sig.details_parsed.price);
+            if (price) detHtml += 'Price: $' + Number(price).toLocaleString();
+            
+            const reason = sig.details_parsed && (sig.details_parsed.signal_reason || sig.details_parsed.reason);
+            if (reason) detHtml += '<br>' + escapeHtml(reason.substring(0, 100));
+            
+            // Signal strength bar for STRONG signals
+            let strengthBar = '';
+            if (stype.includes('STRONG')) {
+                const color = stype.includes('SELL') ? 'var(--accent-red)' : 'var(--accent-green)';
+                strengthBar = '<div style="background:var(--bg-primary);border-radius:3px;height:4px;margin-top:6px;overflow:hidden;"><div style="height:100%;width:' + (stype.includes('STRONG_BUY') ? '90' : '90') + '%;background:' + color + ';"></div></div>';
+            }
+            
+            const sourceLabel = sig.source === 'TRADING_BOT' ? 'BOT' : (sig.source === 'AUTO_SCAN' ? 'SCAN' : '?');
+            
+            html += '<div class="card" style="border-left:3px solid ' + borderColor + ';cursor:pointer;" onclick="viewSignalDetails(\'' + escapeHtml(sig.symbol || '') + '\')">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
+                    '<span style="font-size:16px;font-weight:bold;color:' + borderColor + ';">' + escapeHtml(sig.symbol || 'UNK') + '</span>' +
+                    '<div><span class="badge badge-' + (stype.includes('BUY') ? 'positive' : stype.includes('SELL') ? 'negative' : 'neutral') + '">' + 
+                        escapeHtml(stype) + '</span></div>' +
+                '</div>' +
+                '<div style="display:flex;gap:10px;margin-bottom:8px;font-size:12px;">' +
+                    '<span class="data-label">Source:</span><span>' + sourceLabel + '</span>' +
+                    '<span class="data-label" style="margin-left:8px;">Severity:</span><span style="color:' + severityColor + '>•</span>' +
+                '</div>' +
+                (detHtml ? '<div style="color:var(--text-secondary);font-size:12px;margin-bottom:6px;">' + detHtml + '</div>' : '') +
+                strengthBar +
+                '<div style="margin-top:8px;font-size:11px;color:var(--text-secondary);">Updated: ' + timeDisplay + '</div>' +
+            '</div>';
+        });
+        
+        gridDiv.innerHTML = html;
+    }).catch(e => {
+        console.error('[Signals Grid] Load failed:', e);
+        gridDiv.innerHTML = '<div class="loading" style="color:var(--accent-red);">Failed to load signals. Make sure app.py is running.</div>';
+    });
+}
+
+function viewSignalDetails(symbol) {
+    // Navigate to Analyze tab with the symbol pre-filled
+    if (symbol) {
+        document.getElementById('symbolInput').value = symbol;
+        switchTab('analyze');
+        analyzeSymbol();
+    }
+}
+
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
@@ -311,8 +433,8 @@ function switchTab(tabName) {
     document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
     const buttons = document.querySelectorAll('.nav-tab');
-    // Tabs: dashboard, analyze, alerts, watchlist, history, eval, health, aifeed (AI Intelligence)
-    const tabs = ['dashboard', 'analyze', 'alerts', 'watchlist', 'history', 'eval', 'health', 'aifeed'];
+    // Tabs: dashboard, analyze, alerts, signals, watchlist, history, eval, health, aifeed (AI Intelligence)
+    const tabs = ['dashboard', 'analyze', 'alerts', 'signals', 'watchlist', 'history', 'eval', 'health', 'aifeed'];
     const idx = tabs.indexOf(tabName);
     if (idx >= 0) {
         buttons[idx].classList.add('active');
@@ -325,7 +447,8 @@ function switchTab(tabName) {
     else if (tabName === 'history') loadSnapshots();
     else if (tabName === 'health') loadHealth();
     else if (tabName === 'eval') { loadEvaluation(); loadEvalHistory(); }
-     else if (tabName === 'aifeed') loadAiFeed();
+    else if (tabName === 'aifeed') loadAiFeed();
+    else if (tabName === 'signals') loadSignalsGrid();
 }
 
 // === DASHBOARD ===

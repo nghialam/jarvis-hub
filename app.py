@@ -1106,3 +1106,27 @@ def api_clear_alert_feed():
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
+
+
+
+
+def _init_server():
+    try:
+        _load_config()
+        _load_db()
+        _refresh_data()
+    except Exception as e:
+        print("[INIT] Error during init: %s" % e)
+
+
+# Run on import (for Flask app factory pattern)
+try:
+    _init_server()
+except Exception:
+    pass
+
+
+if __name__ == "__main__":
+    _init_server()
+    print("[APP] Starting Jarvis Hub Flask server on port 8100...")
+    app.run(host="0.0.0.0", port=8100, debug=False, use_reloader=False)
