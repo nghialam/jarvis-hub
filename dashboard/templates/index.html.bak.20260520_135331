@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jarvis Hub - Finance Intelligence</title>
+    <style>
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-card: #21262d;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --accent-green: #2ea043;
+            --accent-red: #da3633;
+            --accent-blue: #58a6ff;
+            --accent-purple: #bc8cff;
+            --border-color: #30363d;
+            --hover-bg: #2d333b;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #1a1f2e 0%, #0d1117 100%);
+            padding: 20px 30px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .nav-tabs {
+            display: flex;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 0 30px;
+            overflow-x: auto;
+        }
+
+        .nav-tab {
+            padding: 12px 24px;
+            cursor: pointer;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 14px;
+            transition: all 0.3s ease;
+            border-bottom: 2px solid transparent;
+            white-space: nowrap;
+        }
+
+        .nav-tab:hover { color: var(--text-primary); background-color: var(--hover-bg); }
+        .nav-tab.active { color: var(--accent-blue); border-bottom-color: var(--accent-blue); }
+
+        .container { padding: 30px; max-width: 1400px; margin: 0 auto; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .section-title { font-size: 20px; margin-bottom: 20px; color: var(--accent-blue); padding-bottom: 10px; border-bottom: 2px solid var(--border-color); }
+
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .card { background: var(--bg-card); border-radius: 8px; padding: 20px; border: 1px solid var(--border-color); transition: transform 0.2s ease; }
+        .card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.3); }
+
+        .index-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 25px; }
+        .index-card { background: var(--bg-secondary); border-radius: 6px; padding: 15px; border-left: 3px solid var(--border-color); }
+        .index-card.positive { border-left-color: var(--accent-green); }
+        .index-card.negative { border-left-color: var(--accent-red); }
+        .index-name { font-size: 12px; color: var(--text-secondary); margin-bottom: 5px; }
+        .index-value { font-size: 20px; font-weight: bold; }
+        .index-change { font-size: 14px; margin-top: 5px; }
+
+        .article-card, .snapshot-card, .knowledge-result {
+            background: var(--bg-secondary);
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 12px;
+            border-left: 3px solid var(--border-color);
+            transition: background 0.2s ease;
+        }
+        .article-card:hover, .snapshot-card:hover { background: var(--hover-bg); cursor: pointer; }
+        .article-card.sentiment-positive { border-left-color: var(--accent-green); }
+        .article-card.sentiment-negative { border-left-color: var(--accent-red); }
+        .article-card.sentiment-neutral { border-left-color: #f0c040; }
+
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+        .badge-positive { background: rgba(46,160,67,0.2); color: var(--accent-green); }
+        .badge-negative { background: rgba(218,54,51,0.2); color: var(--accent-red); }
+        .badge-neutral { background: rgba(240,152,64,0.2); color: #f0c040; }
+
+        .search-box { display: flex; gap: 10px; margin-bottom: 30px; }
+        .search-input {
+            flex: 1; padding: 12px 16px; border: 1px solid var(--border-color);
+            background: var(--bg-secondary); color: var(--text-primary); font-size: 14px;
+            border-radius: 6px; outline: none;
+        }
+        .search-input:focus { border-color: var(--accent-blue); }
+
+        .btn { padding: 12px 24px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; transition: all 0.2s ease; }
+        .btn-primary { background: var(--accent-blue); color: white; }
+        .btn-primary:hover { background: #79c0ff; }
+        .btn-sm { padding: 6px 12px; font-size: 12px; }
+        .btn-danger { background: var(--accent-red); color: white; }
+
+        .watchlist-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        .watchlist-table th, .watchlist-table td { padding: 12px 15px; text-align: left; border-bottom: 1px solid var(--border-color); }
+        .watchlist-table th { color: var(--text-secondary); font-weight: 600; font-size: 13px; }
+
+        .health-item { display: flex; justify-content: space-between; align-items: center; padding: 15px; border-bottom: 1px solid var(--border-color); }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; }
+        .healthy { background: var(--accent-green); }
+        .warning { background: #f0c040; }
+        .error { background: var(--accent-red); }
+
+        .loading { text-align: center; padding: 40px; color: var(--text-secondary); }
+        .hidden { display: none; }
+        .text-green { color: var(--accent-green); }
+        .text-red { color: var(--accent-red); }
+
+        @media (max-width: 768px) {
+            .grid, .index-grid { grid-template-columns: 1fr; }
+            .container { padding: 15px; }
+            .header { flex-direction: column; gap: 10px; text-align: center; }
+        }
+
+        #snapshotDetailModal {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7); z-index: 1000;
+            display: flex; align-items: center; justify-content: center;
+        }
+        #snapshotDetailModal .modal-content {
+            background: var(--bg-secondary); border-radius: 8px; padding: 25px;
+            max-width: 700px; max-height: 80vh; overflow-y: auto; width: 90%;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>&#x2699;&#xFE0F; Jarvis Hub</h1>
+        <div id="currentDateTime" style="color: var(--text-secondary); font-size: 14px;"></div>
+    </header>
+
+    <nav class="nav-tabs">
+        <button class="nav-tab active" onclick="switchTab('dashboard')">Dashboard</button>
+        <button class="nav-tab" onclick="switchTab('analyze')">Analyze</button>
+        <button class="nav-tab" onclick="switchTab('knowledge')">Knowledge</button>
+        <button class="nav-tab" onclick="switchTab('watchlist')">Watchlist</button>
+        <button class="nav-tab" onclick="switchTab('history')">History</button>
+        <button class="nav-tab" onclick="switchTab('eval')">Market Eval</button>
+         <button class="nav-tab" onclick="switchTab('health')">Health</button>
+    </nav>
+
+    <main class="container">
+        <!-- DASHBOARD -->
+        <section id="dashboard" class="tab-content active">
+            <h2 class="section-title">&#x1F4C8; Market Overview</h2>
+            <div id="vnIndices" class="index-grid"></div>
+            <div id="globalIndices" class="index-grid"></div>
+
+            <div id="rateBox" style="background: var(--bg-secondary); padding: 20px; border-radius: 8px; margin-bottom: 30px; text-align: center;">
+                <div id="usdVndRate" style="font-size: 36px; font-weight: bold; color: var(--accent-blue);">--</div>
+                <div style="color: var(--text-secondary); margin-top: 5px;">USD/VND (Vietcombank)</div>
+            </div>
+
+            <h2 class="section-title">&#x1F4F0; Headlines & Sentiment</h2>
+            <div id="articlesList"></div>
+        </section>
+
+        <!-- ANALYZE -->
+        <section id="analyze" class="tab-content">
+            <h2 class="section-title">&#x1F4C8; Stock/Gold/Crypto Analysis</h2>
+            <div class="search-box">
+                <input type="text" class="search-input" id="symbolInput" placeholder="Enter symbol (e.g., VNM, BTC, XAUUSD)">
+                <button class="btn btn-primary" onclick="analyzeSymbol()">&#x1F50D; Analyze</button>
+            </div>
+            <div id="analysisResult" class="loading">Enter a symbol and click Analyze to see the report...</div>
+        </section>
+
+        <!-- KNOWLEDGE -->
+        <section id="knowledge" class="tab-content">
+            <h2 class="section-title">&#x1F4D6; Knowledge Base (Investopedia)</h2>
+            <div class="search-box">
+                <input type="text" class="search-input" id="knowledgeInput" placeholder="Search financial concepts (e.g., P/E, RSI)">
+                <button class="btn btn-primary" onclick="searchKnowledge()">&#x1F50D; Search</button>
+            </div>
+            <div id="knowledgeResults">Enter a keyword and click Search to search knowledge base...</div>
+        </section>
+
+        <!-- WATCHLIST -->
+        <section id="watchlist" class="tab-content">
+            <h2 class="section-title">&#x1F3AF; My Watchlist</h2>
+            <div class="search-box">
+                <input type="text" class="search-input" id="newSymbolInput" placeholder="Add new symbol...">
+                <button class="btn btn-primary" onclick="addToWatchlist()">&#x2795; Add</button>
+            </div>
+            <table class="watchlist-table">
+                <thead>
+                    <tr><th>Symbol</th><th>Name</th><th>Price</th><th>Change%</th><th>Action</th></tr>
+                </thead>
+                <tbody id="watchlistBody"></tbody>
+            </table>
+        </section>
+
+        <!-- HISTORY -->
+        <section id="history" class="tab-content">
+            <h2 class="section-title">&#x1F552; Daily Snapshots</h2>
+            <div id="snapshotsList"></div>
+         </section>
+
+           <!-- MARKET EVALUATION -->
+           <section id="eval" class="tab-content">
+               <h2 class="section-title">&#x1F4CA; Market Evaluation &amp; Recommendations</h2>
+               <div style="margin-bottom: 15px;">
+                   <button class="btn btn-primary" onclick="generateEvaluation()">&#x1F504; Generate Today's Eval</button>
+                   <span id="evalStatus" style="color: var(--text-secondary); font-size: 12px; margin-left: 10px;"></span>
+               </div>
+               <div id="evalContent"><div class="loading">Loading market evaluation...</div></div>
+               <div id="evalHistory" style="margin-top: 30px;"></div>
+           </section>
+
+          <!-- HEALTH -->
+         <section id="health" class="tab-content">
+            <h2 class="section-title">&#x1F7E2; System Health</h2>
+            <div id="healthStatus"><div class="loading">Checking system health...</div></div>
+        </section>
+    </main>
+
+     <!-- Snapshot Detail Modal -->
+    <div id="snapshotDetailModal" class="hidden" style="display:none !important;" onclick="if(event.target===this) { this.classList.add('hidden'); this.style.display='none'; }">
+        <div class="modal-content">
+            <h3 id="snapshotTitle"></h3>
+            <p id="snapshotContent" style="margin-top:15px; white-space:pre-wrap; line-height:1.6;"></p>
+            <button class="btn btn-primary" style="margin-top:20px;" onclick="document.getElementById('snapshotDetailModal').classList.add('hidden'); document.getElementById('snapshotDetailModal').style.display='none'">Close</button>
+        </div>
+    </div>
+
+    <script>
+        // === Utilities ===
+        function updateDateTime() {
+            const now = new Date();
+            document.getElementById('currentDateTime').textContent = now.toLocaleString('vi-VN', {
+                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+                hour: '2-digit', minute: '2-digit'
+            });
+        }
+        setInterval(updateDateTime, 1000);
+        updateDateTime();
+
+        function getSentimentClass(sentiment) {
+            if (!sentiment) return 'neutral';
+            const s = sentiment.toLowerCase();
+            if (s.includes('tich cuc') || s.includes('positive') || s.includes('bullish')) return 'positive';
+            if (s.includes('tieu cuc') || s.includes('negative') || s.includes('bearish')) return 'negative';
+            return 'neutral';
+        }
+
+        function getStatusBadge(className, text) {
+            return `<span class="badge badge-${className}">${text}</span>`;
+        }
+
+        // === Tab Switching ===
+        function switchTab(tabName) {
+            document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+            // Find and activate the correct tab button
+            const buttons = document.querySelectorAll('.nav-tab');
+            const tabs = ['dashboard', 'analyze', 'knowledge', 'watchlist', 'history', 'health'];
+            const idx = tabs.indexOf(tabName);
+            if (idx >= 0) buttons[idx].classList.add('active');
+
+            document.getElementById(tabName).classList.add('active');
+
+            // Load data for the tab
+            if (tabName === 'dashboard') loadDashboard();
+            if (tabName === 'watchlist') loadWatchlist();
+            if (tabName === 'history') loadSnapshots();
+            if (tabName === 'health') loadHealth();
+        }
+
+        // === Dashboard Loading ===
+        function loadDashboard() {
+            const grid = document.getElementById('vnIndices');
+            const globalGrid = document.getElementById('globalIndices');
+            const articlesList = document.getElementById('articlesList');
+
+            grid.innerHTML = '<div class="loading">Loading indices...</div>';
+            globalGrid.innerHTML = '';
+            articlesList.innerHTML = '<div class="loading">Loading headlines...</div>';
+
+            fetch('/api/health')
+                .then(r => r.json())
+                .then(data => {
+                    // VN Indices
+                    if (data.indices && data.indices['VN-Index']) {
+                        const vni = data.indices['VN-Index'];
+                        const cls = vni.change_pct >= 0 ? 'positive' : 'negative';
+                        const arrow = vni.change_pct >= 0 ? '\u25B2' : '\u25BC';
+                        grid.innerHTML = `
+                            <div class="index-card ${cls}">
+                                <div class="index-name">VN-Index</div>
+                                <div class="index-value">${vni.price}</div>
+                                <div class="index-change text-${vni.change_pct >= 0 ? 'green' : 'red'}">${arrow} ${Math.abs(vni.change_pct)}%</div>
+                            </div>`;
+                    }
+
+                    // Global Indices
+                    if (data.indices && data.indices['global']) {
+                        let html = '';
+                        Object.entries(data.indices['global']).slice(0, 5).forEach(([name, info]) => {
+                            const cls = info.change_pct >= 0 ? 'positive' : 'negative';
+                            const arrow = info.change_pct >= 0 ? '\u25B2' : '\u25BC';
+                            html += `
+                                <div class="index-card ${cls}">
+                                    <div class="index-name">${name}</div>
+                                    <div class="index-value">${info.price}</div>
+                                    <div class="index-change text-${info.change_pct >= 0 ? 'green' : 'red'}">${arrow} ${Math.abs(info.change_pct)}%</div>
+                                </div>`;
+                        });
+                        globalGrid.innerHTML = html;
+                    }
+
+                    // Exchange Rates
+                    if (data.rates && data.rates['USD']) {
+                        const usd = data.rates['USD'];
+                        document.getElementById('usdVndRate').textContent =
+                            usd.transfer ? `${usd.transfer.toLocaleString()} d` : 'N/A';
+                    }
+
+                    // Load articles
+                    loadArticles();
+                });
+        }
+
+        function loadArticles() {
+            fetch('/api/snapshots?limit=1')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.snapshots && data.snapshots.length > 0) {
+                        const content = data.snapshots[0].full_content;
+                        const lines = content.split('\n').filter(l => l.trim().length > 5);
+
+                         let html = '';
+                        let articleCount = 0;
+
+                        for (const line of lines) {
+                             // Match **N. title** markdown format
+                            const match = line.match(/^\*\*?\d+\.\s*\*\*?\s*(.+?)\s*\*\*?$/);
+                            if (match) {
+                                 // Article title - strip markdown bold markers and numbering
+                                const cleanTitle = match[1].trim();
+                                articleCount++;
+
+                                if (articleCount > 15) break;
+
+                                html += `
+                                      <div class="article-card">
+                                          <div class="article-title">${cleanTitle}</div>
+                                          <div style="color: var(--text-secondary); font-size:12px; margin-top:4px;">#${articleCount}</div>
+                                      </div>`;
+                            } else if (line.includes('Source:') || line.includes('📌')) {
+                                const sentiment = extractSentiment(line);
+                                if (sentiment) {
+                                    html += `<div style="margin-bottom:12px;">`;
+                                    html += `<span class="badge badge-${getSentimentClass(sentiment)}">${sentiment}</span>`;
+                                    html += `<span style="color:var(--text-secondary); font-size:12px; margin-left:10px;">${line.replace(/📌/g, '').replace('Source:', 'Source:')}</span>`;
+                                    html += `</div>`;
+                                }
+                            }
+                        }
+
+                        if (articleCount === 0) {
+                            html = '<div class="loading">No recent snapshots with articles found.</div>';
+                        }
+                        document.getElementById('articlesList').innerHTML = html;
+                    } else {
+                        document.getElementById('articlesList').innerHTML = '<div class="loading">No snapshots available yet. Run "jarvis briefing" first.</div>';
+                    }
+                })
+                .catch(() => {
+                    // Fallback: use dashboard static data if health API fails
+                    fetch('/')
+                        .then(r => r.text())
+                        .then(html => {
+                            document.getElementById('articlesList').innerHTML = '<div class="loading">Dashboard loading...</div>';
+                        });
+                });
+        }
+
+        function extractSentiment(text) {
+            if (text.includes('tích cực') || text.includes('positive')) return 'TÍCH CỰC';
+            if (text.includes('tiêu cực')) return 'TIÊU CỰC';
+            if (text.includes('trung lập') || text.includes('neutral')) return 'TRUNG LẬP';
+            return null;
+        }
+
+        // === Analyze Symbol ===
+        function analyzeSymbol() {
+            const symbol = document.getElementById('symbolInput').value.trim().toUpperCase();
+            if (!symbol) return alert('Please enter a symbol');
+
+            const resultDiv = document.getElementById('analysisResult');
+            resultDiv.innerHTML = '<div class="loading">Analyzing ' + symbol + '...</div>';
+
+            fetch(`/api/analyze?symbol=${encodeURIComponent(symbol)}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.error) {
+                        resultDiv.innerHTML = `<div style="color: var(--accent-red);">${data.error}</div>`;
+                        return;
+                    }
+
+                    const d = data.data;
+                    let html = `<div style="margin-bottom:20px;">`;
+                    html += `<h3>${d.name || d.symbol} (${d.symbol})</h3>`;
+                    html += `<p style="font-size:24px; margin:10px 0;">${d.price ? d.price.toLocaleString() + ' ' + (d.currency||'') : 'N/A'}</p>`;
+
+                    if (d.change_pct !== undefined) {
+                        const cls = d.change_pct >= 0 ? 'text-green' : 'text-red';
+                        html += `<span class="${cls}" style="font-size:18px;">${d.change_pct >= 0 ? '+' : ''}${d.change_pct}% | ${d.prev_close ? 'Prev: ' + d.prev_close : ''}</span>`;
+                    }
+
+                    if (d.pe_ratio) html += `<p><strong>P/E:</strong> ${d.pe_ratio}</p>`;
+                    if (d.eps) html += `<p><strong>EPS:</strong> ${d.eps}</p>`;
+                    if (d.market_cap) html += `<p><strong>Market Cap:</strong> ${d.market_cap}</p>`;
+                    if (d.volume) html += `<p><strong>Volume:</strong> ${Number(d.volume).toLocaleString()}</p>`;
+
+                    // Technical Analysis Summary
+                    if (d.technical_summary) {
+                        html += `<h4 style="margin-top:20px; color: var(--accent-purple);">Technical Indicators</h4>`;
+                        html += `<pre style="background:var(--bg-card); padding:15px; border-radius:6px; overflow-x:auto;">${d.technical_summary}</pre>`;
+                    }
+
+                    // LLM Report
+                    if (d.llm_report) {
+                        html += `<h4 style="margin-top:20px; color: var(--accent-purple);">AI Analysis</h4>`;
+                        html += `<pre style="background:var(--bg-card); padding:15px; border-radius:6px; overflow-x:auto;">${d.llm_report}</pre>`;
+                    }
+
+                    html += `<p style="margin-top:20px; color: var(--text-secondary); font-size:12px;">Last update: ${d.last_update || 'N/A'}</p>`;
+                    html += '</div>';
+
+                    resultDiv.innerHTML = html;
+                })
+                .catch(() => {
+                    resultDiv.innerHTML = '<div style="color: var(--accent-red);">Failed to fetch data. Check if Jarvis Hub is running.</div>';
+                });
+        }
+
+        // === Knowledge Base Search ===
+        function searchKnowledge() {
+            const query = document.getElementById('knowledgeInput').value.trim();
+            if (query.length < 2) return alert('Please enter at least 2 characters');
+
+            const resultsDiv = document.getElementById('knowledgeResults');
+            resultsDiv.innerHTML = '<div class="loading">Searching knowledge base...</div>';
+
+            fetch(`/api/search?q=${encodeURIComponent(query)}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.results || data.results.length === 0) {
+                        resultsDiv.innerHTML = `
+                            <div style="color: var(--text-secondary); padding:20px; text-align:center;">
+                                No results found for "${query}".<br>
+                                <button class="btn btn-primary" style="margin-top:15px;" onclick="generateKnowledge('${query}')">Generate with AI instead?</button>
+                            </div>`;
+                        return;
+                    }
+
+                    let html = `<p style="margin-bottom:15px;">Found ${data.count} results for "<strong>${query}</strong>"</p>`;
+
+                    data.results.forEach(r => {
+                        const tagsHtml = r.tags ? `<div style="margin-top:8px;"><span style="color:var(--accent-purple); font-size:12px;">${r.tags}</span></div>` : '';
+                        html += `
+                            <div class="knowledge-result">
+                                <div class="knowledge-term">${r.term}</div>
+                                <div>${r.content.substring(0, 300)}${r.content.length > 300 ? '...' : ''}</div>
+                                ${tagsHtml}
+                                <div style="margin-top:8px; color:var(--text-secondary); font-size:12px;">Updated: ${r.updated_at || 'N/A'}</div>
+                            </div>`;
+                    });
+
+                    resultsDiv.innerHTML = html;
+                })
+                .catch(() => {
+                    resultsDiv.innerHTML = '<div style="color: var(--accent-red);">Failed to search knowledge base.</div>';
+                });
+        }
+
+        function generateKnowledge(term) {
+            const resultsDiv = document.getElementById('knowledgeResults');
+            resultsDiv.innerHTML = `<div class="loading">Generating explanation for "${term}"...</div>`;
+
+            fetch(`/api/search?q=${encodeURIComponent(term)}&generate=true`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.generated) {
+                        resultsDiv.innerHTML = `
+                            <div class="knowledge-result">
+                                <div class="knowledge-term">${term}</div>
+                                <pre style="white-space:pre-wrap;">${data.generated}</pre>
+                                <button class="btn btn-primary btn-sm" style="margin-top:15px;" onclick="saveGenerated('${term}', this)">Save to Knowledge Base</button>
+                            </div>`;
+                    } else {
+                        resultsDiv.innerHTML = '<div style="color: var(--accent-red);">Failed to generate answer.</div>';
+                    }
+                })
+                .catch(() => {
+                    resultsDiv.innerHTML = '<div style="color: var(--accent-red);">Generation failed. Check Jarvis Hub status.</div>';
+                });
+        }
+
+        function saveGenerated(term, btn) {
+            fetch('/api/knowledge/save', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ term, content: document.querySelector('#knowledgeResults pre').textContent })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.ok) {
+                    btn.textContent = 'Saved!';
+                    btn.disabled = true;
+                }
+            });
+        }
+
+         // === Watchlist Management ===
+        function loadWatchlist() {
+            fetch('/api/watchlist')
+                 .then(r => r.json())
+                 .then(data => {
+                    const tbody = document.getElementById('watchlistBody');
+
+                    const items = data.watchlist || data.items || [];
+
+                    if (items.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color: var(--text-secondary);">Watchlist is empty. Add symbols above.</td></tr>';
+                        return;
+                     }
+
+                    let html = '';
+                    items.forEach(item => {
+                        const priceHtml = item.price !== null ?
+                            `${item.price.toLocaleString()} ${item.symbol.includes('BTC') ? 'USD' : ''}` :
+                            '<span style="color:var(--text-secondary);">N/A</span>';
+
+                        const changeClass = item.change_pct >= 0 ? 'text-green' : 'text-red';
+                        const changeHtml = item.change_pct !== null ?
+                            `<span class="${changeClass}">${item.change_pct >= 0 ? '+' : ''}${item.change_pct}%</span>` :
+                            '<span style="color:var(--text-secondary);">N/A</span>';
+
+                        html += `
+                            <tr>
+                                <td><strong>${item.symbol}</strong></td>
+                                <td>${item.name || '-'}</td>
+                                <td>${priceHtml}</td>
+                                <td>${changeHtml}</td>
+                                <td><button class="btn btn-danger btn-sm" onclick="removeFromWatchlist('${item.symbol}', ${item.id})">Remove</button></td>
+                            </tr>`;
+                    });
+                    tbody.innerHTML = html;
+                })
+                .catch(() => {
+                    document.getElementById('watchlistBody').innerHTML = '<tr><td colspan="5" style="text-align:center; color: var(--accent-red);">Failed to load watchlist.</td></tr>';
+                });
+        }
+
+        function addToWatchlist() {
+            const input = document.getElementById('newSymbolInput');
+            const symbol = input.value.trim().toUpperCase();
+            if (!symbol) return alert('Enter a symbol first');
+
+            fetch('/api/watchlist/add', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ symbol })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.ok) {
+                    input.value = '';
+                    loadWatchlist();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            });
+        }
+
+        function removeFromWatchlist(symbol, id) {
+            if (!confirm(`Remove ${symbol} from watchlist?`)) return;
+
+            fetch('/api/watchlist/remove', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ symbol })
+            })
+            .then(r => r.json())
+            .then(data => {
+               if (data.ok) loadWatchlist();
+            });
+        }
+
+        // === History/Snapshots ===
+        function loadSnapshots() {
+            const listDiv = document.getElementById('snapshotsList');
+            listDiv.innerHTML = '<div class="loading">Loading snapshots...</div>';
+
+            fetch('/api/snapshots')
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.snapshots || data.snapshots.length === 0) {
+                        listDiv.innerHTML = '<div class="loading">No snapshots available. Run "jarvis briefing" first.</div>';
+                        return;
+                    }
+
+                    let html = '<p style="color:var(--text-secondary); margin-bottom:15px;">Click a snapshot to view full content</p>';
+                    data.snapshots.forEach(snap => {
+                        html += `
+                            <div class="snapshot-card" onclick="showSnapshot('${snap.date}')">
+                                <div style="font-weight:bold; color:var(--accent-blue);">${snap.date}</div>
+                                <div style="color:var(--text-secondary); font-size:13px;">${snap.article_count || ''} articles | ${new Date(snap.date).toLocaleDateString('vi-VN')}</div>
+                            </div>`;
+                    });
+                    listDiv.innerHTML = html;
+                })
+                .catch(() => {
+                    listDiv.innerHTML = '<div style="color: var(--accent-red);">Failed to load snapshots.</div>';
+                });
+        }
+
+        function showSnapshot(date) {
+            fetch(`/api/snapshots`)
+                .then(r => r.json())
+                .then(data => {
+                    const snap = data.snapshots.find(s => s.date === date);
+                    if (snap) {
+                        document.getElementById('snapshotTitle').textContent = `Jarvis Hub Daily Briefing - ${date}`;
+                        document.getElementById('snapshotContent').textContent = snap.full_content;
+                        document.getElementById('snapshotDetailModal').classList.remove('hidden');
+                    }
+                });
+        }
+
+        // === Health Check ===
+        function loadHealth() {
+            fetch('/api/health')
+                .then(r => r.json())
+                .then(data => {
+                    let html = '';
+
+                    html += `<div class="health-item">
+                        <span><span class="status-dot ${data.status === 'ok' ? 'healthy' : 'error'}"></span>Jarvis Hub</span>
+                        <strong style="color:${data.status === 'ok' ? 'var(--accent-green)' : 'var(--accent-red)'};">${data.status.toUpperCase()}</strong>
+                    </div>`;
+
+                    html += `<div class="health-item">
+                        <span><span class="status-dot ${data.ollama.includes('online') ? 'healthy' : 'warning'}"></span>Ollama</span>
+                        <span>${data.ollama}</span>
+                    </div>`;
+
+                    html += `<div class="health-item">
+                        <span><span class="status-dot healthy"></span>Database</span>
+                        <span>${data.db_path || 'N/A'}</span>
+                    </div>`;
+
+                    html += `<div class="health-item">
+                        <span><span class="status-dot healthy"></span>Last Updated</span>
+                        <span>${data.timestamp || 'Unknown'}</span>
+                    </div>`;
+
+                    document.getElementById('healthStatus').innerHTML = html;
+                })
+                .catch(() => {
+                    document.getElementById('healthStatus').innerHTML = '<div style="color: var(--accent-red); padding:20px;">Failed to connect to Jarvis Hub.</div>';
+                });
+        }
+
+        // === Initialize on load ===
+        window.addEventListener('load', () => {
+            updateDateTime();
+            loadDashboard();
+        });
+
+        // Enter key handlers
+        document.getElementById('symbolInput').addEventListener('keypress', (e) => { if(e.key==='Enter') analyzeSymbol(); });
+        document.getElementById('knowledgeInput').addEventListener('keypress', (e) => { if(e.key==='Enter') searchKnowledge(); });
+        document.getElementById('newSymbolInput').addEventListener('keypress', (e) => { if(e.key==='Enter') addToWatchlist(); });
+    </script>
+</body>
+</html>
