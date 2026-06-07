@@ -1,0 +1,23 @@
+def _load_watchlist_symbols():
+    """Load watchlist from unified DB.
+
+    Falls back to hardcoded list if DB query fails.
+    """
+    try:
+        import sys as _sys
+        _sys.path.insert(0, os.path.dirname(__file__))
+        from db_watchlist import get_symbols_for_asset_type
+
+        # Fetch all symbols regardless of asset type
+        all_symbols = []
+        for atype in ("VN_STOCK", "US_EQUITY", "CRYPTO", "ETF", "OTHER"):
+            all_symbols.extend(get_symbols_for_asset_type(atype))
+
+        if all_symbols:
+            return all_symbols
+    except Exception as e:
+        print(f"[WARN] _load_watchlist_symbols DB error, fallback: {e}", file=sys.stderr)
+
+    # Fallback default list
+    return ["VCI","VIC","VCB","DGW","FTS","TCB","HCM","PDR","NLG","DXG",
+                "BMP","VGI","FRT","VIX","CTD","MBB","FPT","VHM","PVS","EVF","AAPL","MSFT","TSLA","BTC"]

@@ -1,0 +1,60 @@
+# Jarvis Hub Configuration
+system:
+  name: "Jarvis Hub"
+  timezone: "Asia/Saigon"
+
+telegram:
+  target_chat_id: "1670013239"
+  openclaw_path: "/opt/homebrew/bin/openclaw"
+
+ollama:
+  url: "http://localhost:11434"
+  model: "qwen3.6:35b-a3b-mxfp8"
+
+feed:
+  sources:
+    - name: "Cafef Doanh nghiệp"
+      url: "https://cafef.vn/doanh-nghiep.rss"
+      category: "vn-stock"
+      priority: 1
+    - name: "VnExpress Kinh doanh"
+      url: "https://vnexpress.net/rss/kinh-doanh.rss"
+      category: "vn-business"
+      priority: 2
+    - name: "VnExpress Kinh tế"
+      url: "https://vnexpress.net/rss/kinh-te.rss"
+      category: "vn-economy"
+      priority: 2
+
+    # Global markets
+    - name: "Reuters Business"
+      url: "https://feeds.reuters.com/reuters/businessNews"
+      category: "global-business"
+      priority: 3
+    - name: "BBC Business"
+      url: "http://feeds.bbci.co.uk/news/business/rss.xml"
+      category: "global-economy"
+      priority: 3
+
+    # AI & Tech
+    - name: "TechCrunch"
+      url: "https://techcrunch.com/feed/"
+      category: "ai-tech"
+      priority: 3
+    - name: "The Verge"
+      url: "https://www.theverge.com/rss/index.xml"
+      category: "ai-tech"
+      priority: 4
+    - name: "Ars Technica AI"
+      url: "https://feeds.arstechnica.com/artificial-intelligence"
+      category: "ai-tech"
+      priority: 4
+
+exchange_rates_source: "vietcombank"   # vietcombank, sacombank
+
+schedule:
+  morning_briefing: "06:18"   # GMT+7
+  evening_briefing: "23:00"   # GMT+7
+
+db_path: "~/jarvis-hub/knowledge/jarvis.db"
+daily_dir: "~/jarvis-hub/daily"

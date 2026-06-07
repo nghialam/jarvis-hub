@@ -1,0 +1,29 @@
+{
+   "stocks": [
+     "VCI",
+     "VIC",
+     "VCB",
+     "DGW",
+     "FTS",
+     "TCB",
+     "HCM",
+     "PDR",
+     "NLG",
+     "DXG",
+     "BMP",
+     "VGI",
+     "FRT",
+     "VIX",
+     "CTD",
+     "MBB",
+     "FPT",
+     "VHM",
+     "PVS",
+     "EVF"
+   ],
+   "settings": {
+     "auto_halt_minutes": 30,
+     "max_signals_per_day": 50
+   },
+   "updated_at": "2026-05-27T20:30:00"
+}

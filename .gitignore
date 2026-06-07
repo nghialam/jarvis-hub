@@ -1,16 +1,60 @@
+# Python
 __pycache__/
-*.pyc
-*.pyo
-.env
-venv/
+*.py[cod]
+*$py.class
 *.egg-info/
 dist/
 build/
-.pytest_cache/
+.eggs/
+
+# Virtual environments
+venv/
 .venv/
+env/
+
+# Env files (contains secrets)
+.env
+.env.*
+.env.dnse
+!.env.example
+
+# OS / Editor
 .DS_Store
+*.swp
+*.swo
+*~
+
+# Flask / WSGI
+instance/
+.webassets-cache
+*.log
+
+# Backups / rebuild artifacts
 *.bak*
-app.clean.py
+*.rebuild
+*.rebuilt
 app.py.backup.corrupted
+app.clean.py
+
+# Logs from running services
+jarvis_hub.log
+jarvis_hub_new.log
+
+# Bug logs
 BUGLOG_*
+BUGREPORT_*
+
+# Plans directory (internal only)
 .plans/
+
+# Node (if any)
+node_modules/
+
+# Knowledge / Cache directories with generated data
+daily/
+knowledge/
+kanban/
+
+# DB files (small, but may contain sensitive market data)
+*.db
+*.sqlite

@@ -767,10 +767,10 @@ def api_latest_signals():
         # From signals_log
         try:
             rows = db._c().execute("""
-                SELECT symbol, 'TRADING_BOT', signal_type, CAST(strength AS REAL) as strength,
+                SELECT symbol, 'TRADING_BOT' AS source, signal_type, CAST(strength AS REAL) as strength,
                        price, details, detected_at, delivered as is_delivered, delivery_channel
                 FROM signals_log ORDER BY detected_at DESC LIMIT 50
-            """).fetchall()
+             """).fetchall()
             for row in rows:
                 r = dict(row)
                 if isinstance(r.get("details"), str):
@@ -785,12 +785,12 @@ def api_latest_signals():
         # From trading_alerts
         try:
             rows = db._c().execute("""
-                SELECT symbol, 'AUTO_SCAN', signal_type, severity as strength,
+                SELECT symbol, 'AUTO_SCAN' AS source, signal_type, severity as strength,
                        CAST(alert_data->>'price' AS REAL) as price, alert_data as details,
                        timestamp as detected_at,
                        CASE WHEN status='read' THEN 1 ELSE 0 END AS is_delivered, delivery_channel
                 FROM trading_alerts ORDER BY timestamp DESC LIMIT 50
-            """).fetchall()
+             """).fetchall()
             for row in rows:
                 r = dict(row)
                 raw = r.get("details")
