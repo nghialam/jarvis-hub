@@ -35,8 +35,8 @@ def get_token():
     return ""
 
 BOT_TOKEN = get_token()
-OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
-LLM_MODEL = os.environ.get("JARVIS_LLM", "qwen3.6:35b-mlx")
+OMLX_HOST = os.environ.get("OMLX_HOST", "http://localhost:11434")
+LLM_MODEL = os.environ.get("JARVIS_LLM", "Qwen3.6-35B-A3B-MLX-8bit")
 
 ENT_FEEDS = [
     {"name": "Variety",            "url": "https://variety.com/feed/"},
@@ -173,8 +173,8 @@ def collect_all():
             unique.append(a)
     return unique[:50]
 
-def ollama_call(prompt, system_prompt="", max_tokens=5000):
-    """Call Ollama /api/chat endpoint. qwen3.6 uses 'thinking' field."""
+def omlx_call(prompt, system_prompt="", max_tokens=5000):
+    """Call OMLX /v1/chat/completions endpoint. qwen3.6 uses 'thinking' field."""
     payload = json.dumps({
          "model": LLM_MODEL,
          "messages": [
@@ -186,7 +186,7 @@ def ollama_call(prompt, system_prompt="", max_tokens=5000):
     }).encode("utf-8")
 
     try:
-        req = Request("%s/api/chat" % OLLAMA_HOST, data=payload,
+        req = Request("%s/v1/chat/completions" % OMLX_HOST, data=payload,
                        headers={"Content-Type": "application/json"})
         resp = urlopen(req, timeout=60)
         result = json.loads(resp.read())
@@ -200,9 +200,9 @@ def ollama_call(prompt, system_prompt="", max_tokens=5000):
                 full_resp = content
         return full_resp.strip()
     except Exception as exc:
-        print("[OLLAMA ERROR]: %s: %s" % (type(exc).__name__, str(exc)))
-        if "11434" in str(exc):
-            return "Ollama not running -- ollama serve"
+        print("[OMLX ERROR]: %s: %s" % (type(exc).__name__, str(exc)))
+        if "8000" in str(exc):
+            return "OMLX not running -- start omlx"
         return ""
 
 def build_prompts(date_str, art_text):
@@ -253,7 +253,7 @@ def run():
      # Sanity check: verify Ollama is running before wasting time
     try:
         from urllib.request import urlopen as _ur
-        resp = _ur("%s/api/tags" % OLLAMA_HOST, timeout=5)
+        resp = _ur("%s/v1/models" % OMLX_HOST, timeout=5)
         tags = json.loads(resp.read())
         models_list = [m["name"] for m in tags.get("models", [])]
         if LLM_MODEL not in models_list:
@@ -262,7 +262,7 @@ def run():
             send_telegram("*Ollama error* — model not available. Check ollama serve.\n")
             return
     except Exception:
-        print("[ERR] Ollama not reachable at %s" % OLLAMA_HOST)
+        print("[ERR] Ollama not reachable at %s" % OMLX_HOST)
         print("[WARN] Falling back gracefully.")
         send_telegram("*Ollama error* — backend not running. Can't run LLM.\n")
         return
@@ -301,7 +301,7 @@ def run():
     for attempt in range(3):
         try:
             p = prompts["hot"] + "\n\n" + art_text
-            r = ollama_call(p, system_prompt=sp, max_tokens=5000)
+            r = omlx_call(p, system_prompt=sp, max_tokens=5000)
             if len(r) > 100 and "Error" not in r[:20]:
                 llm_hot = r
                 print("     [OK] Hot: %d chars" % len(llm_hot))
@@ -323,7 +323,7 @@ def run():
     for attempt in range(3):
         try:
             p = prompts["watch"] + "\n\n" + art_text
-            r = ollama_call(p, system_prompt=sp, max_tokens=32768)
+            r = omlx_call(p, system_prompt=sp, max_tokens=32768)
             if len(r) > 50 and "Error" not in r[:20]:
                 llm_watch = r
                 print("     [OK] Watch: %d chars" % len(llm_watch))

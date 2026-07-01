@@ -2,8 +2,8 @@
 import json, os, sys, time, urllib.request, urllib.error
 from datetime import datetime
 
-OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
-MODEL_NAME = os.environ.get("LLM_MODEL", "qwen3.6:35b-a3b-mxfp8")
+OMLX_HOST = os.environ.get("OMLX_HOST", "http://localhost:11434")
+MODEL_NAME = os.environ.get("LLM_MODEL", "Qwen3.6-35B-A3B-MLX-8bit")
 TG_CHAT_ID = os.environ.get("JARVIS_TELEGRAM_CHAT_ID", "-1003801745265")
 TG_BOT_TOKEN = os.environ.get("JARVIS_BOT_TOKEN", "").strip() or os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
 
@@ -71,7 +71,7 @@ def llm_call(sys_prompt, user_text, timeout=420):
     for attempt in range(3):
         try:
             req = urllib.request.Request(
-                f"{OLLAMA_HOST}/api/chat", data=payload,
+                f"{OMLX_HOST}/v1/chat/completions", data=payload,
                 headers={"Content-Type":"application/json"})
             resp = urllib.request.urlopen(req, timeout=timeout)
             r = json.loads(resp.read())

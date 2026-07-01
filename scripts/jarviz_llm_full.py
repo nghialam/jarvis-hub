@@ -4,7 +4,7 @@ import json, urllib.request, sys
 from datetime import datetime
 
 def call_ollama(system_prompt, user_text, model="gemma4:e4b-mxfp8", timeout_sec=120):
-    """Call Ollama /api/chat and return the response content."""
+    """Call Ollama /v1/chat/completions and return the response content."""
     payload = {
          "model": model,
          "messages": [
@@ -16,7 +16,7 @@ def call_ollama(system_prompt, user_text, model="gemma4:e4b-mxfp8", timeout_sec=
     }
     req_data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
-        f"http://localhost:11434/api/chat", data=req_data,
+        f"http://localhost:11434/v1/chat/completions", data=req_data,
         headers={"Content-Type": "application/json"}
      )
     resp = urllib.request.urlopen(req, timeout=timeout_sec)

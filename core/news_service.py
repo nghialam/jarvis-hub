@@ -190,8 +190,8 @@ def enrich_article(article: dict, use_llm: bool = False) -> dict:
     if use_llm and _get_config() is not None:
         try:
             config = _get_config()
-            ollama_url = config.get("ollama", {}).get("url", "http://localhost:11434")
-            model = config.get("ollama", {}).get("model", "qwen3.6:latest")
+            omlx_url = config.get("omlx", {}).get("url", "http://localhost:11434")
+            model = config.get("omlx", {}).get("model", "qwen3.6:latest")
 
             prompt = (
                 "Ban la tro gi phan tich thi truong tai chinh Viet Nam.\n"
@@ -200,7 +200,7 @@ def enrich_article(article: dict, use_llm: bool = False) -> dict:
             ) % (title, summary[:500])
 
             resp = requests.post(
-                ollama_url + "/api/chat",
+                omlx_url + "/v1/chat/completions",
                 json={
                     "model": model,
                     "messages": [
@@ -645,11 +645,11 @@ _AIF_PROMPTS = {
 def _call_llm_for_analysis(system_prompt: str, articles_list: list) -> Optional[str]:
     """Generate LLM analysis of news articles using Ollama."""
     global _config
-    if not _config or "ollama" not in (_config or {}):
+    if not _config or "omlx" not in (_config or {}):
         return None
 
-    ollama_url = _config.get("ollama", {}).get("url", "http://localhost:11434")
-    model = _config.get("ollama", {}).get("model", "qwen3.6:35b-a3b-mxfp8")
+    omlx_url = _config.get("omlx", {}).get("url", "http://localhost:11434")
+    model = _config.get("omlx", {}).get("model", "Qwen3.6-35B-A3B-MLX-8bit")
 
     # Build a concise prompt with article summaries
     max_chars = 6000
@@ -682,7 +682,7 @@ def _call_llm_for_analysis(system_prompt: str, articles_list: list) -> Optional[
         req_headers = {"Content-Type": "application/json"}
         
         req = urllib.request.Request(
-            f"{ollama_url}/api/chat",
+            f"{omlx_url}/v1/chat/completions",
             data=req_data,
             headers=req_headers,
         )

@@ -251,7 +251,7 @@ def requests_post(url, payload, timeout=120):
         return None
 
 
-def analyze_with_llm(articles, model="qwen3.6:35b-a3b-mxfp8"):
+def analyze_with_llm(articles, model="Qwen3.6-35B-A3B-MLX-8bit"):
     """Use Ollama to analyze articles with SOURCE ATTRIBUTION in output.
 
     Each claim/reasoning must cite its source so humans can double-check.
@@ -342,7 +342,7 @@ def analyze_with_llm(articles, model="qwen3.6:35b-a3b-mxfp8"):
         }
 
         try:
-            resp = requests_post(f"{LLM_URL}/api/chat", task_payload)
+            resp = requests_post(f"{LLM_URL}/v1/chat/completions", task_payload)
             if resp and resp.get("message", {}).get("content"):
                 result_tasks.append({
                     "section": task_name,

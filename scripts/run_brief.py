@@ -5,8 +5,8 @@ import json, urllib.request, time, sys, os, re, feedparser
 from datetime import datetime
 
 
-OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
-LLM_MODEL = "qwen3.6:35b-a3b-mxfp8"  # Local model only
+OMLX_URL = os.environ.get("OMLX_HOST", "http://localhost:11434")
+LLM_MODEL = "Qwen3.6-35B-A3B-MLX-8bit"  # Local model only
 CHAT_ID = "-1003801745265"
 
 
@@ -131,7 +131,7 @@ def get_llm(system_prompt, user_prompt, timeout=360):
     for attempt in range(3):
         try:
             req = urllib.request.Request(
-                f"{OLLAMA_URL}/api/chat", data=payload,
+                f"{OMLX_URL}/v1/chat/completions", data=payload,
                 headers={"Content-Type": "application/json"}
             )
             resp = urllib.request.urlopen(req, timeout=timeout)

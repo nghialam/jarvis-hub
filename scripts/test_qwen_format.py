@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Test what Ollama /api/chat returns for qwen3.6:35b-mlx."""
+"""Test what Ollama /v1/chat/completions returns for Qwen3.6-35B-A3B-MLX-8bit."""
 import json, urllib.request, feedparser, sys
 from datetime import datetime
 
 OLLAMA = "http://localhost:11434"
-MODEL = "qwen3.6:35b-mlx"
+MODEL = "Qwen3.6-35B-A3B-MLX-8bit"
 TODAY = datetime.now().strftime('%d/%m/%Y (%A)')
 
 # Fetch feeds
@@ -79,7 +79,7 @@ payload = json.dumps({
 }).encode('utf-8')
 
 req = urllib.request.Request(
-       "%s/api/chat" % OLLAMA, data=payload,
+       "%s/v1/chat/completions" % OLLAMA, data=payload,
        headers={"Content-Type": "application/json"}
 )
 resp = urllib.request.urlopen(req, timeout=120)

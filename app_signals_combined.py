@@ -42,7 +42,7 @@ def _load_config():
         print("[CFG] Loaded configuration OK")
     except Exception as e:
         print("[CFG] Config load failed: %s" % e)
-        config = {"ollama": {"url": "http://localhost:11434", "model": "qwen3.6:35b-a3b-mxfp8"},
+        config = {"omlx": {"url": "http://localhost:11434", "model": "Qwen3.6-35B-A3B-MLX-8bit"},
                   "db_path": ":memory:"}
 
 
@@ -109,8 +109,8 @@ def api_health():
       """Health check endpoint."""
     ollama_status = "unknown"
     try:
-        base_url = (config or {}).get("ollama", {}).get("url", "http://localhost:11434") if config else "http://localhost:11434"
-        r = requests.get(base_url + "/api/tags", timeout=5)
+        base_url = (config or {}).get("omlx", {}).get("url", "http://localhost:11434") if config else "http://localhost:11434"
+        r = requests.get(base_url + "/v1/models", timeout=5)
         ollama_status = "online" if r.status_code == 200 else "offline"
     except Exception as e:
         ollama_status = "error: %s" % str(e)[:40]
@@ -119,7 +119,7 @@ def api_health():
 
     return jsonify({
          "status": "ok",
-         "ollama": ollama_status,
+         "omlx": ollama_status,
          "db_path": db_path,
          "cache_time": _cache_time,
      })
@@ -298,8 +298,8 @@ def api_generate_evaluation():
         import jarvis_hub.market_service as market_svc
 
          # Call Ollama with fresh context
-        ollama_url = (config or {}).get("ollama", {}).get("url", "http://localhost:11434")
-        model = (config or {}).get("ollama", {}).get("model", "qwen3.6:35b-a3b-mxfp8")
+        ollama_url = (config or {}).get("omlx", {}).get("url", "http://localhost:11434")
+        model = (config or {}).get("omlx", {}).get("model", "Qwen3.6-35B-A3B-MLX-8bit")
 
         # Build context from fresh data
         ctx_parts = []
@@ -405,7 +405,7 @@ def api_generate_evaluation():
 
          # Call Ollama with FRESH context
         r = requests.post(
-              "%s/api/chat" % ollama_url,
+              "%s/v1/chat/completions" % ollama_url,
             json={
                  "model": model,
                  "messages": [

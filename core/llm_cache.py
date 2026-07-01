@@ -1,5 +1,5 @@
 """
-llm_cache.py -- Thread-safe, TTL-based cache for LLM (Ollama) responses.
+llm_cache.py -- Thread-safe, TTL-based cache for LLM (OMLX) responses.
 
 Prevents redundant API calls when the same prompt/hash is requested multiple times
 within a short window (default 300s / 5 min). Used by:
@@ -7,11 +7,11 @@ within a short window (default 300s / 5 min). Used by:
 - core/news.py llm_sentiment (article sentiment analysis)
 - core/market.py llm_due_diligence
 
-Circuit breaker pattern integrated to prevent hammering a failing Ollama instance.
+Circuit breaker pattern integrated to prevent hammering a failing OMLX instance.
 
 Usage:
     cache = LLMResponseCache(ttl=300, circuit_threshold=3)
-    result = cache.get_or_call(prompt_hash, lambda: ollama_call(prompt))
+    result = cache.get_or_call(prompt_hash, lambda: omlx_call(prompt))
 """
 import hashlib
 import threading

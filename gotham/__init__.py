@@ -14,11 +14,11 @@ TELEGRAM_CHAT_ID = os.environ.get(
 )
 
 # ─── Ollama ──────────────────────────────
-OLLAMA_URL = os.environ.get(
-    "OLLAMA_HOST", "http://localhost:11434"
+OMLX_URL = os.environ.get(
+    "OMLX_HOST", "http://localhost:11434"
 )
 LLM_MODEL = os.environ.get(
-    "LLM_MODEL", "qwen3.6:35b-mlx"
+    "LLM_MODEL", "Qwen3.6-35B-A3B-MLX-8bit"
 )
 
 # ─── Pipeline Defaults ──────────────────────

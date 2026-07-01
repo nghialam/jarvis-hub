@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Intelligence — Jarvis Hub</title>
+<style>
+  /* ── Reset & Base ───────────────────────────── */
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0d1117;--card:#161b22;--border:#30363d;--text:#c9d1d9;
+    --accent:#58a6ff;--green:#3fb950;--orange:#d29922;--red:#f85149;
+    --hover:#1c2128
+  }
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.6}
+  
+  /* ── Layout Grid ────────────────────────────── */
+  header{background:#010409;border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between}
+  header h1{font-size:1.4rem;color:var(--accent)}
+  .controls{display:flex;gap:8px;align-items:center}
+  main{max-width:1400px;margin:24px auto;padding:0 16px;display:grid;grid-template-columns:1fr 320px;gap:24px}
+  footer{text-align:center;padding:32px 0;color:#8b949e;font-size:.8rem}
+  
+  /* ── Buttons & Badges ───────────────────────── */
+  .btn{background:var(--card);border:1px solid var(--border);color:var(--text);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:.85rem;transition:.2s}
+  .btn:hover{background:var(--hover);border-color:var(--accent)}
+  .btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+  .badge{display:inline-block;padding:2px 10px;border-radius:12px;font-size:.75rem;font-weight:600;text-transform:uppercase}
+  .badge.T%C3%ADch_C%E1%BB%B1c{background:#0e4429;color:var(--green)}
+  .badge.TRUNG_LAP,.badge.TRUNG_L%C3%81P{background:#4a3700;color:var(--orange)}
+  .badge.Ti%E1%BB%83u_C%E1%BB%B1c{background:#4a1515;color:var(--red)}
+  
+  /* ── Sidebar (Filters + Recommendations) ────── */
+  aside{position:sticky;top:60px;align-self:start}
+  .sidebar-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:16px}
+  .sidebar-card h3{font-size:.95rem;color:var(--accent);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+  
+  /* ── News Cards Grid ─────────────────────────── */
+  .cards-grid{display:grid;gap:16px}
+  .news-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px;transition:.2s}
+  .news-card:hover{border-color:var(--accent);transform:translateY(-1px)}
+  .news-card h4{font-size:.95rem;margin-bottom:6px;line-height:1.4}
+  .news-card p{font-size:.85rem;color:#8b949e;margin-bottom:8px}
+  .news-card a{color:var(--accent);text-decoration:none;font-size:.8rem}
+  
+  /* ── Filter Chips ───────────────────────────── */
+  .filter-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+  
+  /* ── Loading & Empty States ─────────────────── */
+  .empty-state{text-align:center;padding:80px 20px;color:#8b949e}
+  .loading{display:flex;justify-content:center;align-items:center;padding:60px;font-size:1.1rem;color:var(--accent)}
+  
+  /* ── Responsive ─────────────────────────────── */
+  @media(max-width:768px){
+    main{grid-template-columns:1fr!important}
+    aside{position:static!important}
+  }
+</style>
+</head>
+
+<body>
+<header>
+  <h1>📡 AI Intelligence Dashboard v2</h1>
+  <div class="controls">
+    <button class="btn" onclick="loadLatest()">⟳ Refresh</button>
+    <button class="btn" onclick="resetFilters()">☰ Reset Filters</button>
+  </div>
+</header>
+
+<main id="main-content">
+  <!-- LEFT: News Articles Area -->
+  <section>
+    <!-- Date & Run Info Bar -->
+    <div id="run-info-bar" class="sidebar-card" style="background:var(--card);margin-bottom:20px;border:1px solid var(--border)">
+      <h3 id="info-header">Loading...</h3>
+    </div>
+
+    <!-- Sentiment & Category Filter Chips -->
+    <div class="filter-chips" id="sentiment-filters"></div>
+
+    <!-- News Cards Grid -->
+    <div id="news-cards" class="cards-grid"></div>
+  </section>
+
+  <!-- RIGHT: Sidebar (Filters + Recs) -->
+  <aside>
+    <!-- Quick Stats Card -->
+    <div class="sidebar-card">
+      <h3>📊 Quick Stats</h3>
+      <div id="stats-content" style="font-size:.9rem">Loading...</div>
+    </div>
+
+    <!-- Filters Card -->  
+    <div class="sidebar-card">
+      <h3>🔍 Filters</h3>
+      <div id="filter-area"></div>
+    </div>
+
+    <!-- Recommendations Preview Card -->
+    <div class="sidebar-card">
+      <h3>💡 Top Recommendations</h3>
+      <div id="recs-preview" style="font-size:.85rem"></div>
+    </div>
+  </aside>
+</main>
+
+<footer>© 2026 Jarvis Hub — AI Intelligence Dashboard v2 (Local)</footer>
+
+<script>
+const API = window.location.origin;
+let currentRunId = null;
+
+// ── Helpers ────────────────────────────────────────
+function show(id, html){document.getElementById(id).innerHTML=html;}
+async function api(path, opts={}){
+  const res=await fetch(`${API}/api/v2/ai-intelligence${path}`, opts);
+  return res.json();
+}
+
+// ── Sentiment Badge Rendering ──────────────────────
+function sentColor(sent){
+  if(!sent)return'var(--text)';
+  if(sent.startsWith('Tích'))return'var(--green)';
+  if(sent.startsWith('Tiêu'))return'var(--red)';
+  return'var(--orange)';
+}
+
+// ── Load Latest Run ───────────────────────────────
+async function loadLatest(){
+  const data=await api('/latest');
+  if(data.latest_run_id){
+    currentRunId=data.latest_run_id;
+    show('info-header',`📰 Run: ${data.latest_run_id} (${currentRunId})`);
+    await loadRunArticles(currentRunId,{});
+  } else {
+    show('run-info-bar','<p style="padding:20px;color:#8b949e">No data yet — run pipeline first</p>');
+  }
+}
+
+// ── Load Articles for a Run ────────────────────────
+async function loadRunArticles(runId, filters={}){
+  const qs=new URLSearchParams(Object.entries(filters).filter(v=>v[1]))
+    .toString();
+  const path=`/run/${runId}/articles${qs?'?'+qs:''}`;
+  
+  show('news-cards','<div class="loading">Loading...</div>');
+  
+  try{
+    const data=await api(path);
+    
+    // Render cards
+    if(!data.articles||data.articles.length===0){
+      show('news-cards',`<div class="empty-state"><p>No articles found${Object.keys(filters).length?' with current filters':''}</p></div>`);
+      return;
+    }
+
+    const html=data.articles.map((a,i)=>{
+      const sentClass=a.sentiment==='Tích_Cực'?'badge tích-cực':
+                     a.sentiment==='Tiêu_Cực'?'badge tiêu-cực':'badge trung-lap';
+      return`<div class="news-card">
+        <h4>${i+1}. ${a.title||'Untitled'}</h4>
+        <p style="display:flex;gap:8px;align-items:center"><span class="${sentClass}">${a.sentiment||'N/A'}</span><span style="margin-left:auto;color:#6e7681;font-size:.75rem">${a.order_in_run!=null?'Order:'+a.order_in_run:''}</span></p>
+        <p>${(a.summary_raw||'').substring(0,200)}...</p>
+        ${a.url?`<a href="${a.url}" target="_blank">📎 Source Link</a>`:''}
+      </div>`;
+    }).join('');
+    
+    show('news-cards',`<div class="cards-grid">${html}</div>`);
+    
+  } catch(err){
+    show('news-cards',`<div class="empty-state"><p>Error loading: ${err.message}</p></div>`);
+  }
+}
+
+// ── Initialize Filters ─────────────────────────────
+async function loadRecommendations(runId){
+  try{
+    const data=await api(`/run/${runId}/recommendations`);
+    if(data.recommendations&&data.recommendations.length>0){
+      const preview=data.recommendations.slice(0,3).map(r=>`<div style="padding:8px;border-bottom:1px solid #21262d"><strong>${r.heading||'Untitled'}</strong><br><span style="color:#8b949e;font-size:.8rem">${r.detail_markdown?.substring(0,100)||''}...</span></div>`).join('');
+      show('recs-preview',preview||'<p style="color:#6e7681">No recommendations yet</p>');
+    } else {
+      show('recs-preview','<p style="color:#6e7681">No recommendations yet for this run</p>');
+    }
+  }catch{show('recs-preview','Error loading recs')};
+}
+
+// ── Stats & Filters Populators ────────────────────────
+async function loadStats(){
+  try{
+    const data=await api('/latest');
+    if(data.latest_run_id){
+      show('stats-content',`<ul style="list-style:none"><li>📰 Latest: ${data.latest_run_id}</li><li>⚡ Articles: ${data.article_count||'—'}</li><li>✅ Status: ${data.status?.toUpperCase()||'UNKNOWN'}</li></ul>`);
+    } else {
+      show('stats-content','<p style="color:#6e7681">No runs yet</p>');
+    }
+  }catch{show('stats-content','Error')}
+}
+
+function resetFilters(){loadLatest();}
+
+// Auto-refresh on interval or manual click
+document.querySelector('.btn')?.addEventListener('click',()=>loadLatest());
+document.addEventListener('DOMContentLoaded',()=>{loadLatest();loadStats();});
+</script>
+</body>
+</html>

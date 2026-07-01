@@ -50,8 +50,8 @@ def _get_token():
 
 
 BOT_TOKEN = _get_token()
-OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
-LLM_MODEL = os.environ.get("LLM_MODEL", "qwen3.6:35b-mlx")
+OMLX_URL = os.environ.get("OMLX_HOST", "http://localhost:11434")
+LLM_MODEL = os.environ.get("LLM_MODEL", "Qwen3.6-35B-A3B-MLX-8bit")
 
 RSS_SOURCES = [
     # === VN ECONOMY/BUSINESS (3) ===
@@ -305,7 +305,7 @@ def build_entertainment_text(articles):
 # ===============================================================================
 
 def get_llm(system_prompt, articles_text, timeout=300):
-    """Call Ollama /api/chat (non-streaming). Sequential only.
+    """Call Ollama /v1/chat/completions (non-streaming). Sequential only.
 
     CRITICAL FIX for qwen3.6: ALL response text comes through 'thinking' field.
     Strip the meta-reasoning preamble ("Here's how I'll approach...") before returning.
@@ -327,7 +327,7 @@ def get_llm(system_prompt, articles_text, timeout=300):
     req_data = json.dumps(payload).encode("utf-8")
     try:
         req = urllib.request.Request(
-            f"{OLLAMA_URL}/api/chat", data=req_data,
+            f"{OMLX_URL}/v1/chat/completions", data=req_data,
             headers={"Content-Type": "application/json"}
         )
         resp = urllib.request.urlopen(req, timeout=timeout)
@@ -376,8 +376,8 @@ def get_llm(system_prompt, articles_text, timeout=300):
 
     except Exception as e:
         print(f"[LLM ERROR] {type(e).__name__}: {e}", file=sys.stderr)
-        if "11434" in str(e):
-            return "Ollama not running - start ollama serve"
+        if "8000" in str(e):
+            return "OMLX not running - start omlx"
         return f"[LLM Error: {type(e).__name__}]"
 
 

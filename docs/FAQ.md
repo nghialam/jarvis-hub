@@ -1,182 +1,180 @@
 # Jarvis Hub — FAQ & Troubleshooting
 
-**Phiên bản:** v2.0 — *Cập nhật: 2026-05-22*
+**Version:** v2.0 — *Updated: 2026-05-22*
 
 ---
 
-## 🔧 Sự cố thường gặp
+## 🔧 Common Issues
 
-### ❌ Dashboard không load được data
+### ❌ Dashboard fails to load data
 
-**Triệu chứng:** Open http://localhost:8100, thấy trang blank hoặc chỉ có loading spinner.
+**Symptom:** Open http://localhost:8100, see a blank page or only a loading spinner.
 
-**Nguyên nhân & Giải pháp:**
+**Causes & Solutions:**
 
-1. **Server chưa chạy**:
+1. **Server not running:**
 ```bash
 # Check process
 ps aux | grep python | grep app.py
 
-# Restart nếu cần
+# Restart if needed
 kill $(lsof -t -i :8100) 2>/dev/null
 cd ~/jarvis-hub && python app.py &
 ```
 
-2. **Port 8100 bị chiếm bởi process khác**:
+2. **Port 8100 occupied by another process:**
 ```bash
-lsof -i :8100         # xem ai đang giữ port
+lsof -i :8100         # see who is holding the port
 lsof -t -i :8100 | xargs kill -9    # force kill
-python app.py          # start lại
+python app.py          # start again
 ```
 
-3. **Database chưa được init**: Server tự động tạo DB lần đầu tiên chạy. Nếu thấy lỗi, xóa `knowledge/jarvis.db` và chạy lại.
+3. **Database not initialized:** The server auto-creates the DB on first run. If you see errors, delete `knowledge/jarvis.db` and run again.
 
 ### ❌ Ollama connection failed
 
-**Triệu chứng:** Analysis report bị empty, LLM report không sinh được.
+**Symptom:** Analysis report is empty, LLM report not generated.
 
-**Kiểm tra:**
+**Check:**
 ```bash
 # Check Ollama server
 curl http://localhost:11434/api/tags
 
-# Start Ollama nếu chưa chạy
+# Start Ollama if not running
 ollama serve &
 
-# Kiểm tra model đã pull chưa
+# Check if model is pulled
 ollama list | grep qwen3.6
 ```
 
-Nếu model chưa tồn tại:
+If model does not exist:
 ```bash
 ollama pull qwen3.6:35b-a3b-mxfp8
-# Hoặc model nhẹ hơn nếu RAM hạn chế:
+# Or a lighter model if RAM is limited:
 ollama pull qwen3.6:latest
-# Sau đó sửa config.yaml cho đúng model name
+# Then update config.yaml with the correct model name
 ```
 
 ### ❌ RSS feeds fetch fail (403 / timeout)
 
-**Triệu chứng:** Articles list trống, sentiment không có.
+**Symptom:** Articles list is empty, no sentiment data.
 
-**Nguyên nhân:** Một số RSS sources chặn request từ server IP hoặc cần User-Agent header.
+**Cause:** Some RSS sources block requests from server IPs or require a User-Agent header.
 
-**Giải pháp:**
-1. Kiểm tra log output trong shell khi chạy `python app.py`
-2. Mở rộng thêm source mới vào `config.yaml`:
+**Solution:**
+1. Check log output in the shell when running `python app.py`
+2. Add new sources to `config.yaml`:
 ```yaml
   sources:
-    - name: "Báo Mới Kinh tế"     # Nguồn mới thay thế
+    - name: "Bao Moi Economics"     # New replacement source
       url: "https://bomoi.com/rss/kinh-te.rss"
       category: "vn-business"
       priority: 2
 ```
 
-### ❌ Knowledge base search trả về "No results"
+### ❌ Knowledge base search returns "No results"
 
-**Triệu chứng:** Search trong KB không tìm thấy term dù nghĩ là đã có.
+**Symptom:** Search in KB does not find the term even though you think it exists.
 
-**Nguyên nhân & Giải pháp:**
+**Causes & Solutions:**
 
-1. **KB chưa được seed**: Chạy `python seed_kb.py` từ terminal để populate entries cơ bản
-2. **Term format khác**: KB dùng exact match trên term field — thử search với term gốc (vd "P/E ratio" thay vì "PE ratio")
-3. **FTS index cần rebuild**: Nếu vừa update content trong DB:
+1. **KB not seeded:** Run `python seed_kb.py` from the terminal to populate basic entries
+2. **Term format mismatch:** KB uses exact match on the term field — try searching with the original term (e.g., "P/E ratio" instead of "PE ratio")
+3. **FTS index needs rebuild:** If you recently updated content in the DB:
 ```python
-# Trong Python REPL:
+# In Python REPL:
 from core.db import Database
 db = Database()
 db.rebuild_fts_index()  # rebuild full-text search index
 ```
 
-### ❌ Dữ liệu analysis bị "outdate" (vấn đề issue #4)
+### ❌ Analysis data is "outdated" (issue #4)
 
-**Triệu chứng:** Eval report, market evaluation hiển thị số liệu cũ (VD: giá cổ phiếu hôm qua nhưng báo cáo nói hôm nay).
+**Symptom:** Eval report, market evaluation shows old data (e.g., yesterday's stock price but the report says today).
 
-**Nguyên nhân:** GET endpoint `market-evaluation` trước đây gọi luôn `generate_daily_evaluation()` mà không fetch data mới.
+**Cause:** The `market-evaluation` GET endpoint previously always called `generate_daily_evaluation()` without fetching fresh data.
 
-**Đã fix trong v2:**
-- Now calls `_refresh_all_sources()` trước tiên — fetch parallel 7+ nguồn (VN-Index, USD/VND, BTC/ETH/SOL, Gold, DXY, Oil)
-- Cache timestamp được refresh sau mỗi lần update
-- `should_refresh()` check: tự động trigger refresh khi stale > 12h hoặc qua new day
+**Fixed in v2:**
+- Now calls `_refresh_all_sources()` first — parallel fetches 7+ sources (VN-Index, USD/VND, BTC/ETH/SOL, Gold, DXY, Oil)
+- Cache timestamp refreshed after each update
+- `should_refresh()` check: auto-triggers refresh when stale > 12h or on a new day
 
-**Kiểm tra data freshness:**
+**Check data freshness:**
 ```bash
-# Health endpoint trả về cache_age_seconds
+# Health endpoint returns cache_age_seconds
 curl -s http://localhost:8100/api/health | python3 -c "import json,sys; d=json.load(sys.stdin); print(f'Cache age: {d[\"cache_age_seconds\"]//60} minutes')"
 ```
 
-> **Khuyến nghị:** Đánh giá thị trường nên chạy vào buổi sáng (sau 7:35) để có data market opening đầy đủ.
+> **Recommendation:** Market evaluation should run in the morning (after 7:35) to have full market opening data.
 
 ---
 
-## ❓ Câu hỏi thường gặp (FAQ)
+## ❓ Frequently Asked Questions (FAQ)
 
-### Q: Jarvis Hub hoạt động offline được không?
-**A:** Không hoàn toàn. Cần:
-- **Ollama server running locally** cho LLM analysis, sentiment, keyword generation
-- **Internet access** cho RSS feeds + Yahoo Finance data
-- **SQLite DB local** — chỉ component chạy offline
+### Q: Can Jarvis Hub work offline?
+**A:** Not completely. It requires:
+- **Ollama server running locally** for LLM analysis, sentiment, keyword generation
+- **Internet access** for RSS feeds + Yahoo Finance data
+- **SQLite DB local** — the only component that runs offline
 
-### Q: Có thể thay model LLM mặc định được không?
-**A:** Có. Sửa trong `config.yaml`:
+### Q: Can I change the default LLM model?
+**A:** Yes. Edit in `config.yaml`:
 ```yaml
 ollama:
-  model: "llama3.2"    # đổi từ qwen3.6 sang llama3.2
+  model: "llama3.2"    # change from qwen3.6 to llama3.2
 ```
-Mẫu có sẵn: `ollama list`
+Available models: `ollama list`
 
-### Q: DB file jarvis.db quá lớn phải làm sao?
-**A:** File DB chỉ chứa knowledge base entries + activity log + watchlist — thường < 1MB. Nếu thấy > 50MB, có thể do FTS index cần optimize:
+### Q: DB file jarvis.db is too large, what should I do?
+**A:** The DB file only contains knowledge base entries + activity log + watchlist — usually < 1MB. If you see > 50MB, the FTS index may need optimization:
 ```bash
-# Chạy VACUUM để compact DB
+# Run VACUUM to compact the DB
 sqlite3 knowledge/jarvis.db "VACUUM;"
 ```
 
-### Q: Có bao nhiêu RSS sources đang cấu hình?
-**A:** Hiện tại có **8 sources**:
+### Q: How many RSS sources are configured?
+**A:** Currently **8 sources**:
 
-| Source | Category | Priority |
-|--------|----------|----------|
-| Cafef Doanh nghiệp | vn-stock | 1 (cao nhất) |
-| VnExpress Kinh doanh | vn-business | 2 |
-| VnExpress Kinh tế | vn-economy | 2 |
-| Reuters Business | global-business | 3 |
-| BBC Business | global-economy | 3 |
-| TechCrunch | ai-tech | 3 |
-| The Verge | ai-tech | 4 |
-| Ars Technica AI | ai-tech | 4 (thấp nhất) |
+- **Cafef Business** | vn-stock | 1 (highest)
+- **VnExpress Business** | vn-business | 2
+- **VnExpress Economy** | vn-economy | 2
+- **Reuters Business** | global-business | 3
+- **BBC Business** | global-economy | 3
+- **TechCrunch** | ai-tech | 3
+- **The Verge** | ai-tech | 4
+- **Ars Technica AI** | ai-tech | 4 (lowest)
 
-### Q: LLM report mất ~30 second, có cách nào nhanh hơn?
-**A:** Có ba cách:
-1. **LLM Cache**: Cùng một symbol sẽ cache result — gọi lần 2 + gần như instant (<1s). Cache hoạt per full prompt hash (symbol + price data snapshot).
-2. **Dùng model nhỏ hơn**: `qwen3.6:latest` thay vì `35b-a3b-mxfp8` (~9GB vs ~37GB RAM, nhanh hơn 3-4x)
-3. **Set llm_rank > 0** trong enrich\_article() để skip Ollama sentiment analysis cho articles (giữ lại chỉ LLM report cho stock analysis)
+### Q: LLM report takes ~30 seconds, is there a faster way?
+**A:** Three options:
+1. **LLM Cache:** Same symbol caches the result — 2nd call is nearly instant (<1s). Cache works per full prompt hash (symbol + price data snapshot).
+2. **Use a smaller model:** `qwen3.6:latest` instead of `35b-a3b-mxfp8` (~9GB vs ~37GB RAM, 3-4x faster)
+3. **Set llm_rank > 0** in `enrich_article()` to skip Ollama sentiment analysis for articles (keep LLM report only for stock analysis)
 
-### Q: Sentiment layer 1 và layer 2 khác nhau như thế nào?
+### Q: What's the difference between sentiment layer 1 and layer 2?
 **A:**
-- **Layer 1**: Keyword-based scoring, chạy local cực nhanh. Dùng positive/negative/vietnamese sentiment keywords list. Chỉ ~50ms/article.
-- **Layer 2**: Deep LLM analysis qua Ollama model. Chính xác hơn nhưng tốn ~2-5s/article.
+- **Layer 1:** Keyword-based scoring, runs locally very fast. Uses positive/negative/Vietnamese sentiment keyword lists. Only ~50ms/article.
+- **Layer 2:** Deep LLM analysis via Ollama model. More accurate but takes ~2-5s/article.
 
-Mặc định: Layer 1 luôn chạy, Layer 2 chỉ khi config cho phép (`llm_rank >= 0`).
+Default: Layer 1 always runs, Layer 2 only when config allows (`llm_rank >= 0`).
 
-### Q: Daily briefing được gửi ra Telegram chưa?
-**A:** Chưa có module Telegram bot tích hợp hoàn chỉnh. Briefing hiện tại lưu vào DB + terminal output. 
+### Q: Is the daily briefing sent to Telegram yet?
+**A:** No fully integrated Telegram bot module yet. Briefings are currently saved to DB + terminal output.
 
-Để push lên Telegram, setup Hermes Agent cron job:
+To push to Telegram, set up a Hermes Agent cron job:
 ```bash
-# Hermes sẽ gọi jarvis briefing và gửi kết quả qua Telegram
+# Hermes will call jarvis briefing and send results via Telegram
 jarvis cron job create \
    --prompt "Run jarvis briefing and send output to user" \
    --schedule "0 23 * * *"     # 6:18 AM GMT+7
 ```
 
-Kết quả brief sẽ được auto-deliver về Telegram chat của user.
+Brief results will be auto-delivered to the user's Telegram chat.
 
 ---
 
 ## 🔍 Debug Checklist
 
-Khi gặp vấn đề, chạy thứ tự:
+When encountering issues, run in order:
 
 1. **Server alive?**
    ```bash
@@ -204,7 +202,7 @@ Khi gặp vấn đề, chạy thứ tự:
    jarvis log -l 30
    ```
 
-6. **Test analysis endpoint direct?**
+6. **Test analysis endpoint directly?**
    ```bash
    curl -s "http://localhost:8100/api/analyze?symbol=VNM" | python3 -m json.tool | head -30
    ```
@@ -213,13 +211,11 @@ Khi gặp vấn đề, chạy thứ tự:
 
 ## 📊 Performance Tips
 
-| Vấn đề | Giải pháp |
-|--------|-----------|
-| Dashboard load chậm | Cache đã tự động, nhưng server cần idle ~2 phút sau khởi động để fetch hết sources |
-| Ollama consume nhiều RAM | Dùng model `qwen3.6:latest` (9GB) thay vì `35b-a3b-mxfp8` (37GB) |
-| DB file phình to | Chạy `VACUUM` định kỳ mỗi tháng |
-| RSS sources fail | Thay bằng những source CDN-friendly hơn như vnexpress, cafef |
+- **Dashboard loads slowly** — Cache is automatic, but the server needs ~2 minutes idle after startup to fetch all sources
+- **Ollama consumes too much RAM** — Use `qwen3.6:latest` (9GB) instead of `35b-a3b-mxfp8` (37GB)
+- **DB file bloated** — Run `VACUUM` periodically every month
+- **RSS sources failing** — Switch to CDN-friendly sources like vnexpress, cafef
 
 ---
 
-*Cập nhật lần cuối: 2026-05-22*
+*Last updated: 2026-05-22*

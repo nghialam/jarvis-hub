@@ -23,15 +23,15 @@ def migrate():
     facts = [
         ("macos", "Agent runs on Mac Mini M4 Pro with Tail-scale LAN, Hermes + qwen3.6 via Ollama MLX"),
         ("architecture", "Gateway architecture: local Ollama gateway at port 8000, no cloud dependencies for core capabilities"),
-        ("models", "Main agent uses qwen3.6:35b-a3b-mxfp8 (~37GB), reserved for main agent + coding subagent"),
+        ("models", "Main agent uses Qwen3.6-35B-A3B-MLX-8bit (~37GB), reserved for main agent + coding subagent"),
         ("models", "gemma4:e4b reserved ONLY for lightweight fast tasks where speed > depth"),
-        ("models", "vision subagent (llama3.2-vision:11b, ~7.8GB) handles image/chart analysis only"),
+        ("models", "vision subagent (REMOVED, ~7.8GB) handles image/chart analysis only"),
         ("memory", "MEMORY.md compacted 2026-05-27 to 16 lines, max 2200 char system prompt limit active"),
         ("rss", "14 RSS sources → 35 unique articles per session (6:1 dedup ratio on most feeds)")
     ]
 
     lessons = [
-        ("ollama", "CRITICAL: NEVER use ThreadPoolExecutor(max_workers>1) for /api/chat calls — causes timeouts with qwen3.6 (~37GB model runs sequentially). Retry up to 3x with 10s delay."),
+        ("omlx", "CRITICAL: NEVER use ThreadPoolExecutor(max_workers>1) for /v1/chat/completions calls — causes timeouts with qwen3.6 (~37GB model runs sequentially). Retry up to 3x with 10s delay."),
         ("html", "CRITICAL: NEVER use .lstrip('<tag>') for HTML tags — strips characters recursively. Use .find()+slicing or .removeprefix()"),
         ("prompting", "Multiple patches corrupt HTML/JS bracket balance. Strategy: backup and rewrite entire script block; binary search+eval() locates exact parse failure point in O(log n) steps"),
         ("prompting", "Qwen3.6 returns EMPTY responses on pure Vietnamese prompts — must use English instructions with 'VIETNAMESE OUTPUT ONLY' directive"),
@@ -64,7 +64,7 @@ def migrate():
     # ─── 2. Additional knowledge from current system prompt context ──
     
     extra = [
-        ("fact", "ollama", "qwen3.6:35b-a3b-mxfp8 requires ~37GB RAM — parallel calls timeout"),
+        ("fact", "omlx", "Qwen3.6-35B-A3B-MLX-8bit requires ~37GB RAM — parallel calls timeout"),
         ("fact", "trading", "VN stock watchlist covers 16 symbols: VCB VIC VPB HPG VNM FPT TCB SSI HDB STB ACB VIB MSN POW GVR VHM"),
         ("fact", "trading", "vn_stock_realtime.py monitors TradingView HOSE for real-time price data on watchlist"),
         ("fact", "learning", "60-lesson trading syllabus across 5 phases (foundation, technical, fundamental, strategy, global markets)"),

@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jarvis Hub 2.0 — Market Intelligence</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+    <!-- Header -->
+    <div class="header">
+        <h1>⚡ Jarvis Hub 2.0</h1>
+        <div class="header-meta">
+            <div class="freshness">
+                <span class="freshness-dot" id="freshness-dot"></span>
+                <span id="freshness-text">Loading...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="nav-tabs">
+        <div class="nav-tab active" data-tab="market" onclick="switchTab('market')">
+            <span class="tab-icon">📊</span> Market Overview
+        </div>
+        <div class="nav-tab" data-tab="news" onclick="switchTab('news')">
+            <span class="tab-icon">📰</span> News Aggregator
+        </div>
+        <div class="nav-tab" data-tab="company" onclick="switchTab('company')">
+            <span class="tab-icon">🏢</span> Company News
+        </div>
+        <div class="nav-tab" data-tab="research" onclick="switchTab('research')">
+            <span class="tab-icon">📈</span> Research Reports
+        </div>
+        <div class="nav-tab" data-tab="screener" onclick="switchTab('screener')">
+            <span class="tab-icon">⚙️</span> Watchlist & Screener
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+
+        <!-- ==================== TAB 1: MARKET OVERVIEW ==================== -->
+        <div id="tab-market" class="tab-content active">
+            <div class="filter-bar" id="market-filters">
+                <button class="filter-btn active" data-period="week" onclick="setMarketPeriod('week')">Week</button>
+                <button class="filter-btn" data-period="month" onclick="setMarketPeriod('month')">Month</button>
+                <button class="filter-btn" data-period="quarter" onclick="setMarketPeriod('quarter')">Quarter</button>
+            </div>
+
+            <div id="market-loading" class="loading" style="display:none">Loading market data</div>
+
+            <!-- VN Indices -->
+            <h3 style="margin-bottom: 12px; color: var(--text-secondary); font-size: 13px;">VIETNAMESSE INDICES</h3>
+            <div class="grid-3" id="vn-indices-grid">
+                <div class="empty-state">Loading...</div>
+            </div>
+
+            <!-- Global Indices -->
+            <h3 style="margin-bottom: 12px; color: var(--text-secondary); font-size: 13px;">GLOBAL INDICES</h3>
+            <div class="grid-4" id="global-indices-grid">
+                <div class="empty-state">Loading...</div>
+            </div>
+
+            <!-- Crypto & Gold -->
+            <h3 style="margin-bottom: 12px; color: var(--text-secondary); font-size: 13px;">CRYPTO & COMMODITIES</h3>
+            <div class="grid-4">
+                <div id="crypto-grid"></div>
+                <div id="gold-container"></div>
+            </div>
+
+            <!-- Top Movers -->
+            <h3 style="margin-bottom: 12px; color: var(--text-secondary); font-size: 13px;">TOP MOVERS</h3>
+            <div id="top-motions-container">
+                <div class="empty-state">Loading top movers...</div>
+            </div>
+        </div>
+
+        <!-- ==================== TAB 2: NEWS AGGREGATOR ==================== -->
+        <div id="tab-news" class="tab-content">
+            <div class="filter-bar" id="news-filters">
+                <button class="filter-btn active" data-category="all" onclick="setNewsCategory('all')">All</button>
+                <button class="filter-btn" data-category="vn-market" onclick="setNewsCategory('vn-market')">VN Market</button>
+                <button class="filter-btn" data-category="vn-business" onclick="setNewsCategory('vn-business')">Business</button>
+                <button class="filter-btn" data-category="global-business" onclick="setNewsCategory('global-business')">Global</button>
+                <button class="filter-btn" data-category="vn-tech" onclick="setNewsCategory('vn-tech')">Tech</button>
+                <span style="margin-left: auto;">
+                    <button class="btn btn-secondary" id="refresh-news-btn" onclick="refreshNews()">🔄 Refresh News</button>
+                </span>
+            </div>
+
+            <div id="news-loading" class="loading" style="display:none">Loading news</div>
+
+            <!-- Featured / Trending -->
+            <div id="news-featured"></div>
+
+            <!-- News List -->
+            <div id="news-list">
+                <div class="empty-state">Loading news articles...</div>
+            </div>
+        </div>
+
+        <!-- ==================== TAB 3: COMPANY NEWS ==================== -->
+        <div id="tab-company" class="tab-content">
+            <div class="filter-bar">
+                <input type="text" class="filter-input" id="company-search" placeholder="Search ticker or company name..." onkeyup="debounceSearch()">
+            </div>
+
+            <div id="company-results">
+                <div class="empty-state">Search for a company to view its news and events.</div>
+            </div>
+
+            <div id="company-news-feed" style="margin-top: 20px;"></div>
+        </div>
+
+        <!-- ==================== TAB 4: RESEARCH REPORTS ==================== -->
+        <div id="tab-research" class="tab-content">
+            <div class="filter-bar" id="research-filters">
+                <button class="filter-btn active" data-broker="all" onclick="setResearchBroker('all')">All Brokers</button>
+                <button class="filter-btn" data-broker="SSI" onclick="setResearchBroker('SSI')">SSI</button>
+                <button class="filter-btn" data-broker="VCI" onclick="setResearchBroker('VCI')">VCI</button>
+                <button class="filter-btn" data-broker="HCM" onclick="setResearchBroker('HCM')">HCM</button>
+                <button class="filter-btn" data-broker="TCBS" onclick="setResearchBroker('TCBS')">TCBS</button>
+                <button class="filter-btn" data-broker="VCBS" onclick="setResearchBroker('VCBS')">VCBS</button>
+                <span style="margin-left: auto;">
+                    <button class="btn btn-secondary" id="crawl-btn" onclick="crawlResearch()">🕷️ Crawl Brokers</button>
+                </span>
+            </div>
+
+            <div id="research-loading" class="loading" style="display:none">Loading reports</div>
+
+            <!-- Broker Stats -->
+            <div id="research-stats"></div>
+
+            <!-- Reports Grid -->
+            <div id="research-list">
+                <div class="empty-state">Loading research reports...</div>
+            </div>
+        </div>
+
+        <!-- ==================== TAB 5: WATCHLIST & SCREENER ==================== -->
+        <div id="tab-screener" class="tab-content">
+            <div id="screener-loading" class="loading" style="display:none">Loading watchlist</div>
+
+            <!-- Add to Watchlist -->
+            <div class="card" style="margin-bottom: 20px;">
+                <div class="card-header">
+                    <span class="card-title">➕ Add to Watchlist</span>
+                </div>
+                <div style="display: flex; gap: 12px; align-items: flex-end;">
+                    <div>
+                        <label style="display: block; font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">Ticker</label>
+                        <input type="text" class="filter-input" id="wl-symbol" placeholder="e.g. VNM" style="width: 100px;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">Name (optional)</label>
+                        <input type="text" class="filter-input" id="wl-name" placeholder="Company name" style="width: 180px;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">Sector (optional)</label>
+                        <input type="text" class="filter-input" id="wl-sector" placeholder="e.g. Consumer" style="width: 140px;">
+                    </div>
+                    <button class="btn btn-primary" onclick="addToWatchlist()">Add</button>
+                </div>
+            </div>
+
+            <!-- Watchlist Table -->
+            <div id="watchlist-container">
+                <div class="empty-state">Loading watchlist...</div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- App Script -->
+    <script>
+    // Debounce for company search
+    let _searchTimeout;
+    function debounceSearch() {
+        clearTimeout(_searchTimeout);
+        const q = document.getElementById('company-search').value.trim();
+        _searchTimeout = setTimeout(() => searchCompany(q), 400);
+    }
+    </script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

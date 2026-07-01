@@ -118,11 +118,11 @@ def test_server_health(test, base_url):
     if data.get("status") != "ok":
         return finish_test(test, "FAIL", f"Server status not ok: {data.get('status')}")
 
-    ollama_ok = data.get("ollama") == "online"
+    omlx_ok = data.get("omlx") == "online"
     cache_age = data.get("cache_age_seconds", 999)
 
-    msg = f"OK | Ollama: {'online' if ollama_ok else 'OFFLINE'} | Cache age: {cache_age}s"
-    return finish_test(test, "PASS" if ollama_ok else "WARN", msg, data)
+    msg = f"OK | OMLX: {'online' if omlx_ok else 'OFFLINE'} | Cache age: {cache_age}s"
+    return finish_test(test, "PASS" if omlx_ok else "WARN", msg, data)
 
 
 def test_market_data(test, base_url):

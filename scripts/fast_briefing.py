@@ -45,7 +45,7 @@ def fetch_rss(source):
 
 def get_llm(section_name, sys_prompt, articles_text):
     ollama_url = "http://localhost:11434"
-    model = "qwen3.6:35b-mlx"
+    model = "Qwen3.6-35B-A3B-MLX-8bit"
     payload = {
         "model": model, "messages": [
             {"role": "system", "content": sys_prompt},
@@ -54,7 +54,7 @@ def get_llm(section_name, sys_prompt, articles_text):
     }
     req_data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
-        f"{ollama_url}/api/chat", data=req_data,
+        f"{ollama_url}/v1/chat/completions", data=req_data,
         headers={"Content-Type": "application/json"}
     )
     resp = urllib.request.urlopen(req, timeout=300)

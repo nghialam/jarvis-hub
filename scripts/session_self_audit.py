@@ -3,12 +3,10 @@
 session_self_audit.py - Session Self-Audit System
 
 Runs at session end to validate:
-1. Daily files created/updated
-2. MEMORY.md freshness check
-3. Backlog consistency
-4. Cron job health
-5. Context drift detection
-6. Recurring pattern alerts
+1. Hindsight plugin status (primary memory store)
+2. Backlog consistency
+3. Cron job health
+4. Recurring pattern alerts
 """
 
 import os
@@ -19,9 +17,7 @@ from datetime import datetime, timedelta
 
 HERMES_HOME = os.path.expanduser("~/.hermes/memory/")
 MEMORY_MD_PATH = os.path.expanduser("~/.hermes/MEMORY.md")
-AGENTS_MD_PATH = os.path.expanduser("~/.hermes/hermes-agent/AGENTS.md")
 MAX_MEMORY_AGE_HOURS = 24
-MIN_DAILY_FILE_SIZE = 10
 
 
 def get_today_file():
@@ -29,80 +25,73 @@ def get_today_file():
     return os.path.join(HERMES_HOME, today + ".md")
 
 
+def audit_hindsight_status():
+    """Check Hindsight plugin is active and responsive."""
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["hermes", "memory", "status"],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0:
+            content = result.stdout
+            has_provider = "Provider:" in content and "hindsight" in content.lower()
+            is_available = "available" in content.lower()
+
+            if has_provider and is_available:
+                return {
+                    "status": "OK",
+                    "messages": ["Hindsight plugin active, provider confirmed"],
+                    "recommendation": None,
+                    "plugin": "hindsight",
+                    "provider_available": True
+                }
+            else:
+                return {
+                    "status": "WARN",
+                    "messages": ["Hindsight installed but provider not confirmed or unavailable"],
+                    "recommendation": "Check Hermes memory configuration and restart",
+                    "plugin": "hindsight",
+                    "provider_available": False
+                }
+        else:
+            return {
+                "status": "WARN",
+                "messages": ["Hindsight status command returned non-zero output"],
+                "recommendation": "Verify Hermes memory plugin is properly installed and configured"
+            }
+    except Exception as e:
+        return {
+            "status": "WARN",
+            "messages": ["Hindsight check failed: " + str(e)],
+            "recommendation": "Ensure Hermes agent is running with memory plugin enabled"
+        }
+
+
 def audit_daily_files():
-    """Check that daily files are being created and maintained."""
+    """Check that daily files (if kept) are being created and maintained."""
     today = get_today_file()
     status = "OK"
     messages = []
 
-    if not os.path.exists(today):
-        status = "WARN"
-        messages.append("Daily file for today not found: " + today)
-
-    if os.path.exists(today) and os.path.getsize(today) < MIN_DAILY_FILE_SIZE:
-        status = "WARN"
-        messages.append("Today's daily file is too small (" + str(os.path.getsize(today)) + "B)")
-
-    for i in range(1, 4):
-        date = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
-        filepath = os.path.join(HERMES_HOME, date + ".md")
-        if not os.path.exists(filepath):
+    if os.path.exists(today):
+        size = os.path.getsize(today)
+        if size < 50:
             status = "WARN"
-            messages.append("No daily file found for " + date)
-        else:
-            size = os.path.getsize(filepath)
-            if size < 50:
-                if status != "WARN":
-                    status = "INFO"
-                messages.append(date + ": Small file (" + str(size) + "B), likely empty")
+            messages.append("Today's daily file is small (" + str(size) + "B) - likely empty")
+
+        for i in range(1, 4):
+            date = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
+            filepath = os.path.join(HERMES_HOME, date + ".md")
+            if os.path.exists(filepath):
+                size = os.path.getsize(filepath)
+                if size < 50:
+                    if status != "WARN":
+                        status = "INFO"
+                    messages.append(date + ": Small file (" + str(size) + "B), likely empty")
 
     return {"status": status, "messages": messages}
-
-
-def audit_memory_md():
-    """Check MEMORY.md freshness and content."""
-    if not os.path.exists(MEMORY_MD_PATH):
-        return {
-            "status": "ERROR",
-            "messages": ["MEMORY.md does not exist at all!"],
-            "recommendation": "Run memory_compact.py to create it."
-        }
-
-    mtime = os.path.getmtime(MEMORY_MD_PATH)
-    age_hours = (datetime.now().timestamp() - mtime) / 3600
-    size = os.path.getsize(MEMORY_MD_PATH)
-
-    with open(MEMORY_MD_PATH, "r") as f:
-        content = f.read()
-
-    lines = [l for l in content.split("\n") if l.strip()]
-    has_date_header = any("Compact" in l or "Updated" in l for l in lines)
-
-    if age_hours > MAX_MEMORY_AGE_HOURS:
-        status = "WARN"
-        recommendation = "MEMORY.md is " + str(int(age_hours)) + "h old. Run memory_compact.py."
-        messages = ["MEMORY.md is stale: " + str(int(age_hours)) + " hours old"]
-    elif size < 100:
-        status = "WARN"
-        recommendation = "MEMORY.md too small (" + str(size) + "B), likely empty or corrupted."
-        messages = ["MEMORY.md suspiciously small: " + str(size) + " bytes"]
-    elif not has_date_header:
-        status = "INFO"
-        recommendation = "No date header in MEMORY.md -- verify it was properly generated."
-        messages = ["MEMORY.md exists but lacks date header"]
-    else:
-        status = "OK"
-        recommendation = None
-        messages = ["MEMORY.md is fresh (" + str(int(age_hours)) + "h old), " + str(len(lines)) + " lines"]
-
-    return {
-        "status": status,
-        "messages": messages,
-        "recommendation": recommendation,
-        "age_hours": age_hours,
-        "size_bytes": size,
-        "line_count": len(lines)
-    }
 
 
 def audit_backlog_consistency():
@@ -147,9 +136,8 @@ def audit_backlog_consistency():
 
 
 def audit_cron_health():
-    """Check that memory-related cron scripts exist and are non-trivial."""
+    """Check that related scripts exist and are non-trivial."""
     cron_scripts = {
-        "memory_compact.py": "/Users/nghialam/jarvis-hub/scripts/memory_compact.py",
         "session_init.py": "/Users/nghialam/jarvis-hub/scripts/session_init.py",
         "auto_improvement_engine.py": "/Users/nghialam/jarvis-hub/scripts/auto_improvement_engine.py",
         "backlog_digest.py": "/Users/nghialam/jarvis-hub/scripts/backlog_digest.py"
@@ -167,12 +155,8 @@ def audit_cron_health():
                 status = "WARN"
                 messages.append(name + ": too small (" + str(size) + "B)")
         else:
-            critical = name in ["memory_compact.py", "session_init.py"]
-            if not critical:
-                pass
-            else:
-                status = "WARN"
-                messages.append(name + ": NOT FOUND (cron will fail)")
+            status = "WARN"
+            messages.append(name + ": NOT FOUND (cron will fail)")
 
     recommendation = None if all(os.path.exists(p) for p in cron_scripts.values()) else "Missing scripts - add to cron jobs."
 
@@ -191,9 +175,9 @@ def detect_context_drift():
 
     if not daily_files:
         return {
-            "status": "WARN",
-            "messages": ["No daily files to compare against"],
-            "recommendation": "Memory system may need reinitialization"
+            "status": "INFO",
+            "messages": ["No daily files found (memory backed by Hindsight) - this is normal"],
+            "recommendation": None
         }
 
     most_recent = max(daily_files, key=os.path.getmtime)
@@ -202,7 +186,7 @@ def detect_context_drift():
     if age_hours > MAX_MEMORY_AGE_HOURS:
         status = "WARN"
         messages = ["Most recent daily file is " + str(int(age_hours)) + "h old"]
-        recommendation = "Create today's daily file via session_init.py"
+        recommendation = "Consider archiving old daily files"
     else:
         status = "OK"
         messages = ["Daily files current (" + str(int(age_hours)) + "h old)"]
@@ -240,7 +224,7 @@ def audit_error_patterns():
     recurring = [(kw, c) for kw, c in pattern_counts.items() if c >= 2]
 
     status = "INFO"
-    messages = ["Checked last 5 daily files for error patterns"]
+    messages = ["Checked last 5 daily files for error patterns (optional, memory is Hindsight-backed)"]
     recommendation = None
 
     if recurring:
@@ -263,8 +247,8 @@ def run_audit():
     results = {}
     warnings = []
 
+    results["hindsight_status"] = audit_hindsight_status()
     results["daily_files"] = audit_daily_files()
-    results["memory_md"] = audit_memory_md()
     results["backlog"] = audit_backlog_consistency()
     results["cron_health"] = audit_cron_health()
     results["context_drift"] = detect_context_drift()
@@ -289,16 +273,17 @@ def run_audit():
     report_lines = [
         "### Session Self-Audit Report",
         "Date: " + datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "Memory Store: Hindsight (primary, replaced MEMORY.md)",
         "Overall Status: " + overall,
         ""
     ]
 
     for key, data in results.items():
-        icon_map = {"OK": "\u2705", "WARN": "\u26a0\ufe0f", "ERROR": "\u274c"}
+        icon_map = {"OK": "\u2705", "WARN": "\u26a0\ufe0f", "ERROR": "\u274c", "INFO": "\u2139\ufe0f"}
         icon = icon_map.get(data["status"], "?")
         report_lines.append(icon + " " + key + ": " + data["status"])
         for msg in data["messages"]:
-            report_lines.append("   - " + msg)
+            report_lines.append("    - " + msg)
 
     if overall == "WARN" and warnings:
         report_lines.append("")

@@ -10,8 +10,8 @@ except ImportError:
     print("FATAL: feedparser not installed")
     sys.exit(1)
 
-OLLAMA_URL = "http://localhost:11434"
-MODEL = "qwen3.6:35b-a3b-mxfp8"
+OMLX_URL = "http://localhost:11434"
+MODEL = "Qwen3.6-35B-A3B-MLX-8bit"
 
 RSS_SOURCES = [
     {"name": "Cafef Doanh nghiệp", "url": "https://cafef.vn/doanh-nghiep.rss", "section": "VN"},
@@ -46,7 +46,7 @@ def fetch_rss(source):
 
 
 def ollama_chat(system_prompt, user_content, timeout=600):
-    """Call Ollama /api/chat endpoint."""
+    """Call Ollama /v1/chat/completions endpoint."""
     payload = {
         "model": MODEL,
         "messages": [
@@ -58,7 +58,7 @@ def ollama_chat(system_prompt, user_content, timeout=600):
     }
     req_data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
-        f"{OLLAMA_URL}/api/chat", data=req_data,
+        f"{OMLX_URL}/v1/chat/completions", data=req_data,
         headers={"Content-Type": "application/json"}
     )
     try:

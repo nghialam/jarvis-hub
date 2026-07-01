@@ -7,9 +7,10 @@ telegram:
   target_chat_id: "1670013239"
   openclaw_path: "/opt/homebrew/bin/openclaw"
 
-ollama:
+omlx:
   url: "http://localhost:11434"
-  model: "qwen3.6:35b-a3b-mxfp8"
+  model: "Qwen3.6-35B-A3B-MLX-8bit"
+  api_key: "0979794448"
 
 feed:
   sources:

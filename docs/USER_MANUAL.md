@@ -1,387 +1,263 @@
-# 📘 JARVIS HUB — HƯỚNG DẪN SỬ DỤNG CHO NGƯỜI DÙNG
+# 📘 JARVIS HUB 2.0 — User Manual
 
-**Phiên bản:** v2.0 — *Cập nhật: 2026-05-22*  
-*Dành cho nhà đầu tư cá nhân, trader, và người quan tâm thị trường tài chính Việt Nam & toàn cầu.*
-
----
-
-## 🎯 Jarvis Hub LÀ GÌ?
-
-Jarvis Hub là công cụ **trợ lý AI tài chính** chạy hoàn toàn trên máy tính của bạn, giúp:
-
-- ✅ **Tổng hợp tin tức** tự động từ các nguồn Cafef, VnExpress, Reuters...
-- ✅ **Phân tích cổ phiếu/vàng/crypto** với chỉ số kỹ thuật và gợi ý MUA/HOLD/BÁN
-- ✅ **Tra cứu thuật ngữ** tài chính kiểu dictionary
-- ✅ **Theo dõi danh mục** (watchlist) giá realtime
-- ✅ **Đánh giá thị trường hàng ngày** — tổng quan xu hướng
-
-**Ưu điểm:** Dữ liệu luôn tươi (fetch từ Yahoo Finance), AI phân tích local (không cần internet ngoài RSS/API), bảo mật tuyệt đối (data không gửi đi đâu cả).
+**Version:** v2.0 | **Updated:** 2026-06-28
 
 ---
 
-## 🚀 BẮT ĐẦU NHANH
+## What Is Jarvis Hub?
 
-### Bước 1: Mở Jarvis Hub
+Jarvis Hub is a **local financial intelligence platform** for Vietnamese and global markets. It runs entirely on your machine — no external data leaves, no cloud dependencies beyond the Ollama LLM inference engine.
+
+**Key capabilities:**
+
+- **Real-time market data** — VN stocks (via vnstock4), global indices, crypto, gold, oil
+- **Technical analysis** — RSI, SMA20/50, MACD, Bollinger Bands, momentum
+- **LLM-powered reports** — Qwen3.6 analyzes data and generates BUY/SELL/HOLD recommendations with confidence scores
+- **News aggregation** — RSS feeds from Cafef, VnExpress, Reuters with sentiment analysis (heuristic + LLM)
+- **Watchlist & alerts** — Track symbols, get RSI/MACD-based trading signals
+- **Knowledge base** — Financial term dictionary with FTS5 full-text search
+
+---
+
+## Dashboard Overview
+
+Open `http://localhost:8100/hub2` to see the main dashboard. It has these tabs:
+
+### 📊 Overview Tab — Market Intelligence Portal
+
+Shows live data from 7+ sources simultaneously:
+
+| Section | Data Points |
+|---------|-------------|
+| **VN Indices** | VN-Index, HOSE Cap — price, change %, 1W/1M/1Q changes |
+| **Global Indices** | S&P 500, Dow Jones, NASDAQ, Nikkei 225, Hang Seng, KOSPI, DAX, FTSE 100 |
+| **Crypto** | BTC, ETH, SOL — price, % change (from Binance/Yahoo) |
+| **Gold & Oil** | Gold ($/oz), WTI Oil ($/barrel) |
+| **DXY** | US Dollar Index |
+| **Exchange Rates** | USD/VND transfer/sell from Vietcombank |
+| **Top Motions** | VN-30 stocks ranked: top gainers and losers |
+
+**How to use:**
+1. Open the tab → data auto-fetches (parallel fetch via ThreadPoolExecutor)
+2. Wait ~5-15s for all sources to complete
+3. View candlestick charts from Yahoo Finance 5d/30m intervals
+4. Click **Auto Refresh** button to force a fresh data pull
+
+### 💡 Analysis Tab — Deep Symbol Analysis
+
+Enter any symbol to get:
+
+| Section | Details |
+|---------|---------|
+| **Market Data** | Price, change%, percentage, P/E, EPS, Market Cap |
+| **Technical Indicators** | SMA20/50, RSI14, MACD line/signal/histogram, Bollinger Bands, Momentum (10-day ROC), Support & Resistance levels |
+| **Signal Analysis** | RSI oversold (<30) → buy opportunity; RSI overbought (>70) → reversal warning |
+| **LLM Report** | AI-generated: trends across 3 timeframes (short/mid/long), support/resistance, recommendations with confidence score (%), risk level, stop-loss suggestions, investment catalysts (bullish/bearish) |
+
+**Examples:**
+- Vietnamese stock: `HVN` → auto-appends `.VN`, fetches vnstock4 data
+- Global stock: `AAPL` → Yahoo Finance chart + CSV fallback
+- Crypto: `BTC` → Binance API + Yahoo
+- Gold: `XAUUSD` → special gold fetcher
+
+### 📰 News Feed Tab — AI-Scored Headlines
+
+Shows aggregated news from configured RSS sources with:
+- **Title & source** (Cafef, VnExpress, Reuters, TechCrunch, etc.)
+- **Category & sector tag** (banking, real estate, tech, energy, FMCG, etc.)
+- **Sentiment classification** — 🟢 tích cực / 🔴 tiêu cực / 🟡 trung lập
+  - Layer 1: Heuristic keyword scoring (always runs)
+  - Layer 2: Ollama LLM analysis (top 15 articles only)
+- **Importance score** — LLM scores importance 1-10 for VN market impact
+- **Filters** — Filter by category, sentiment, or recency
+
+### 💾 Market Evaluation Tab
+
+Auto-generates a daily market assessment covering:
+- Overall trend (bullish/bearish/neutral) + confidence (1-100)
+- Deep dive per category: VN stocks, crypto, gold, oil/DX
+- Risk opportunities (2-3 each)
+- Short-term recommendations with stop-loss levels
+
+**Generate new assessment:** Click "Generate" button → triggers LLM call on fresh market data.
+
+### ⭐ Watchlist Tab
+
+Your portfolio of tracked symbols showing:
+- Current price + % change
+- Add/remove symbols easily
+- Auto-scan generates trading signals based on RSI/MACD thresholds
+
+### 📊 Signals Tab
+
+Trading signals from two sources merged and deduplicated:
+- **TRADING_BOT** — Automated signal engine
+- **AUTO_SCAN** — Watchlist-based alerts
+
+Filter by:
+- Signal type (BUY/SELL/HOLD/STOP_LOSS/TAKE_PROFIT)
+- Severity (LOW/MEDIUM/HIGH/CRITICAL)
+- Symbol
+- Read/unread status
+
+### 🧠 AI Intelligence Tab
+
+Shows past runs of the AI intelligence pipeline:
+- Run dates, article counts, chain summaries
+- Full run details: articles listed, recommendations extracted
+- Pipeline health indicator + daily average stats
+
+---
+
+## Knowledge Base (Term Dictionary)
+
+Search financial terms by keyword:
+
+1. Type term in search input: "P/E ratio" or "RSI" or "Moving Average"
+2. Press Enter or click 🔍 SEARCH
+3. Results shown with tags, content preview, and relevance score ranking
+4. **AI-generated fallback:** If no exact match, LLM generates a definition → you can choose to save it
+
+**Term format:** Each entry has `term`, `content` (definition with examples), and `tags` for filtering.
+
+---
+
+## Using Via CLI
+
+The command-line interface mirrors dashboard functionality:
 
 ```bash
 cd ~/jarvis-hub
+
+# Daily briefing with sentiment analysis + market indices + FX rates
+python cli.py briefing --type morning
+
+# Deep stock analysis with TA indicators + LLM report
+python cli.py analyze VIC
+
+# Watchlist management
+python cli.py watch add HPG              # Add with auto-name
+python cli.py watch list                 # View live prices
+python cli.py watch remove HPG           # Remove from watch
+
+# Search financial terms
+python cli.py search "moving average"   # Returns matches + AI fallback
+
+# Quiz mode (spaced repetition)
+python cli.py quiz                     # Tests knowledge randomly
+
+# System health check
+python cli.py doctor                   # Checks config, DB, Ollama, RSS feeds
+
+# View history & compare days
+python cli.py log                      # Activity logs
+python cli.py history 2026-06-01 2026-06-02   # Diff between two briefings
+```
+
+---
+
+## Scheduling Automated Tasks (Cron Jobs)
+
+Jarvis Hub runs automatically via Hermes Agent cron jobs:
+
+### Daily News & Strategy Briefing (Primary Automation)
+- **Schedule:** Every day at 06:00 GMT+7
+- **Source:** RSS feeds (`https://cafef.vn/doanh-nghiep.rss`, `https://vnexpress.net/rss/kinh-doanh.rss`)
+- **Output:** Telegram message with market data + sentiment + investment recommendations
+
+### Other Automated Jobs
+| Job | Schedule | Purpose |
+|-----|----------|---------|
+| Jarvis Auto-Update Pipeline | Mon-Fri 08:45 | System health, code analysis, maintenance |
+| Memory Compact | Sundays 09:00 | Weekly hindsight recall synthesis |
+| Daily Memory Update | Every day 23:00 | Auto-retain durable facts into Hindsight |
+| Backlog Sync | Every day 22:00 | BACKLOG.md updates & re-prioritization |
+| Auto-Improvement Engine | Every day 01:00 | Pattern detection → SKILL.md promotion |
+| Memory Regression Test | Every day 02:00 | Validate memory systems |
+
+**Managing cron jobs:**
+```bash
+hermes cron job list                              # View all active jobs
+hermes cron job pause <job_id>                    # Suspend a job
+hermes cron job resume <job_id>                   # Resume a paused job
+hermes cron job remove <job_id>                   # Delete a job
+hermes cron job run <job_id>                      # Force execution now (debugging)
+```
+
+---
+
+## How LLM Analysis Works
+
+1. **Tier 1: Raw Data Collection** — Fetches live prices, news headlines, macro data → saves to `jarvis.db`
+2. **Tier 2: LLM Pipeline** — Reads compiled data from DB → builds prompt → calls Ollama with Qwen3.6 → cleans reasoning preamble leaks → saves analysis report
+
+### Prompt Structure
+- Market overview (VN stocks + macro indicators)
+- Sector momentum & hot stock analysis
+- Macro factors (US indices, gold/oil impact, crypto sentiment)
+- News impact summary for VN market
+- Short-term forecast + actionable recommendations
+
+### Output Format
+- Markdown with headers (#### sections), bullet points, no numbered lists
+- Includes: confidence %, risk level, stop-loss suggestion, catalysts
+
+---
+
+## Configuration (`config.yaml`)
+
+All settings in `~/jarvis-hub/config.yaml`:
+
+| Section | Key | Purpose |
+|---------|-----|----------|
+| `system` | timezone | Defaults to Asia/Saigon (GMT+7) |
+| `telegram` | target_chat_id | Telegram delivery channel (1670013239) |
+| `omlx` | url | Ollama endpoint — default: http://localhost:11434 |
+| `omlx` | model | LLM model name — default: Qwen3.6-35B-A3B-MLX-8bit |
+| `feed.sources[].priority` | 1 / 2 / 3 / 4 | Lower number = higher priority in news feed display |
+| `exchange_rates_source` | vietcombank/sacombank | Which bank's rates to use |
+| `schedule.morning_briefing` | "06:18" | Morning briefing time (GMT+7) |
+
+---
+
+## Data Sources Summary
+
+| Source | Covers | Primary / Fallback |
+|--------|--------|---------------------|
+| **Yahoo Finance** | VN stocks, global indices, gold, oil, DXY, crypto | Chart API v8 + CSV download v7 fallback |
+| **vnstock4** | VN stock OHLCV data (KBS/VCI sources) | Primary for VN stocks; applies x1000 VND multiplier |
+| **Binance API** | BTC, ETH, SOL prices | Primary for crypto |
+| **Vietcombank** | USD/VND exchange rates | Web-scraped HTML parser |
+| **RSS Feeds** | News from Cafef, VnExpress, Reuters, etc. | feedparser with deduplication & sentiment scoring |
+
+---
+
+## Troubleshooting
+
+### Dashboard won't load / blank screen
+- Wait 30 seconds for initial data refresh (not a bug)
+- Manually trigger: `POST /api/v1/market/auto-refresh/trigger`
+- Check Ollama is running: `curl localhost:11434/api/tags`
+
+### LLM analysis not producing results
+- Ensure Ollama is reachable; check `jarvis doctor` output
+- Verify model exists in Ollama: models list should include your configured model
+- Circuit breaker may be open after too many failures — wait 60s for recovery window
+
+### Port 8100 already occupied
+```bash
+lsof -t -i :8100 | xargs kill -9
 python app.py
 ```
 
-Mở trình duyệt và truy cập: **http://localhost:8100**
+### Knowledge base searching returns nothing
+- Use broader keywords or try different search terms
+- Try generating a definition: when no results found, AI can generate one on-the-fly
 
-> 💡 Mẹo: Nếu thấy màn hình đen trống, chờ 30 giây để hệ thống fetch dữ liệu lần đầu.
-
-### Bước 2: Làm quen giao diện
-
-Dashboard có **6 tab chính** (menu bên trái):
-
-| Tab | Biểu tượng | Dùng để làm gì? |
-|-----|-----------|----------------|
-| News Feed | 📰 Tin tức mới nhất + cảm xúc thị trường |
-| Analysis | 📈 Phân tích chi tiết 1 mã cổ phiếu/vàng/crypto |
-| Knowledge Base | 💡 Tra cứu thuật ngữ tài chính |
-| Daily Snapshots | ⏰ Lịch sử briefing hàng ngày |
-| Market Evaluation | 📊 Đánh giá tổng quan thị trường hôm nay |
-| Watchlist | ⭐ Theo dõi danh sách yêu thích |
-
-Bây giờ hãy khám phá từng tab! 👇
+### Data seems stale
+- Default cache TTL is 5 minutes for stocks/crypto, 3 min for news
+- Force refresh via API endpoint or restart Flask server
 
 ---
 
-## 📰 TAB 1: TIN TỨC (NEWS FEED)
-
-### Hiển thị gì?
-- **5 bài news mới nhất** từ Cafef, VnExpress, Reuters...
-- Mỗi bài có 4 thông tin: tiêu đề, tóm tắt, nguồn, cảm xúc (TÍCH CỰC / TIÊU CỰC / TRUNG LẬP)
-
-### Cách dùng:
-1. Nhìn tiêu đề → chọn đọc chi tiết trong phần "Chi tiết"
-2. Màu sắc giúp bạn nắm nhanh: 🟢 Tích cực | 🔴 Tiêu cực | ⚪ Trung lập
-3. Filter theo category (VN Stock, Global Economy, AI Tech...)
-
-### Ví dụ thực tế:
-```
-[1] P/E của VNM là 24.5 — cao hơn trung bình ngành
-   ☀️ TÍCH CỰC | Cafef Doanh nghiệp
-   Tóm tắt: Sữa Vinamilch công bố lợi nhuận Q1 tăng...
-```
-
----
-
-## 📈 TAB 2: PHÂN TÍCH (ANALYSIS) — *Tính năng MẠNH NHẤT*
-
-Đây là nơi bạn nhập mã cổ phiếu và nhận báo cáo phân tích chi tiết.
-
-### Cách sử dụng:
-
-**Bước 1:** Nhập symbol vào ô "Enter symbol"
-- Cổ phiếu Việt Nam: `VNM`, `FRT`, `HPG`, `VC`... ( hệ thống tự thêm `.VN`)
-- Vàng: `XAUUSD` hoặc `XAU/USD`
-- Crypto: `BTC`, `ETH`, `SOL`
-
-**Bước 2:** Nhấn Enter hoặc click nút 📊 "Analyze"
-
-**Bước 3:** Chờ ~5-15 giây (hệ thống đang fetch dữ liệu real-time từ Yahoo Finance)
-
-### Báo cáo trả về có những gì?
-
-#### A) Dữ liệu thị trường
-| Trường | Ý nghĩa |
-|--------|---------|
-| **Price** | Giá hiện tại (VNĐ cho cổ phiếu, USD cho vàng/crypto) |
-| **Change %** | Hôm nay tăng/giảm bao nhiêu % |
-| **Volume** | Khối lượng giao dịch hôm nay |
-| **P/E** | Tỷ lệ giá/lợi nhuận — so sánh với ngành |
-| **EPS** | Lợi nhuận trên mỗi cổ phiếu |
-| **Market Cap** | Vốn hóa thị trường |
-
-#### B) Chỉ số kỹ thuật (Technical Indicators)
-|指標 | Ý nghĩa | Tín hiệu mua/bán |
-|-----|---------|------------------|
-| **SMA 20/50** | Đường trung bình động — giá nằm trên = xu hướng tăng |
-| **RSI (14)** | Đo sức mạnh:<br>• >70 = Overbought (quá mua, dễ giảm)<br>• <30 = Oversold (quá bán, dễ tăng)<br>• 30-70 = Bình thường |
-| **MACD** | Đắt/từ cross signal — histogram dương = bullish, âm = bearish |
-
-#### C) Báo cáo AI (LLM Report) ⭐ *Độc quyền*
-Hệ thống phân tích tự động bao gồm:
-
-1. **📊 Xu hướng 3 khung thời gian**:
-   - Ngắn hạn (1-5 ngày): Điểm vào/out tiềm năng
-   - Trung hạn (1-4 tuần): Xu hướng chính sắp tới
-   - Dài hạn (>1 tháng): So với SMA200, xu hướng vĩ mô
-
-2. **📌 Support & Resistance**:
-   - 3 mức Support: S1 (gần nhất), S2, S3 (mạnh)
-   - 3 mức Resistance: R1 (gần nhất), R2, R3 (khó vượt)
-
-3. **💡 Khuyến nghị**:
-   - **MUA / HOLD / BÁN** — kèm lý do chi tiết
-   - Confidence Score (% mức độ tin cậy)
-   - Risk Level (Thấp/Trung bình/Cao)
-   - Stop-loss đề xuất (giá cắt lỗ an toàn)
-
-4. **🔥 Investment Catalysts**:
-   - 2-3 catalyst BULLISH: báo cáo tài chính, cổ tức, mở rộng...
-   - 2-3 catalyst BEARISH: rủi ro lạm phát, regulatory...
-
-### Ví dụ thực tế:
-
-**Nhập:** `VNM` → Enter  
-
-**Kết quả bạn sẽ thấy:**
-```
-📊 VNM (Vietnam Dairy)
-Giá: 57.500đ | +1.23% | Market Cap: 78.9T VND
-
---- Chỉ số kỹ thuật ---
-SMA_20: 57.200 (GIÁ NẰM TRÊN) ✅ 
-RSI(14): 62.3 (NEUTRAL)
-MACD histogram: +20 (BULLISH 📈)
-
---- Báo cáo AI ---
-# Khuyến nghị: HOLD
-
-## Xu hướng:
-- Ngắn hạn: Giá đang sideway, chờ breakout khỏi đỉnh SMA50...
-- Trung hạn: Xu hướngsideway 3 tuần, vùng giao dịch 56k-58k
-- Dài hạn: Trên SMA200 (trend tăng), nhưng P/E cao hơn ngảnh 
-
-## Hỗ trợ & Kháng cự:
-- S1: 57.000  S2: 56.500   S3: 55.800
-- R1: 58.000  R2: 58.500   R3: 59.200
-
-## Catalysts:
-BULLISH: Báo cáo Q2 sắp công bố (dự kiến tốt), cổ tức mùa hè... 
-BEARISH: Lạm phát tăng gây áp lực chi phí nguyên liệu...
-```
-
-💡 **Mẹo hay:** Sau khi phân tích lần 1, lần sau gọi lại cùng symbol sẽ **nhanh gấp 5-10 lần** (hệ thống đã cache kết quả LLM rồi).
-
----
-
-## 💡 TAB 3: KNOWLEDGE BASE (NGÂN HÀNG THUẬT NGỮ)
-
-Tra cứu các khái niệm tài chính như tra từ điển.
-
-### Cách dùng:
-1. Gõ thuật ngữ vào ô input: `P/E ratio`, `RSI`, `Moving Average`...
-2. Nhấn 🔍 SEARCH hoặc Enter
-3. Hệ thống tìm trong database nếu có, nếu không sẽ **tự động generate** định nghĩa bằng AI
-
-### Ví dụ:
-
-**Tìm:** `RSI`  
-**Kết quả:**
-```
-## RSI (Relative Strength Index)
-RSI là chỉ số kỹ thuật đo sức mạnh của mã cổ phiếu trên thang 0-100.
-
-Các ngưỡng quan trọng:
-• >70 → OVERBOUGHT (quá mua, có thể điều chỉnh giảm)
-• <30 → OVERSOLD (quá bán, có thể bật tăng)
-• 30-70 → bình thường
-
-Ứng dụng: Kết hợp với MACD để xác nhận signals buy/sell.
-Tags: stock, technical analysis, momentum indicator
-```
-
-### Mẹo:
-- Nếu search ra "No results", click nút **"Generate with AI instead?"** — hệ thống tự viết definition rồi hỏi bạn có lưu lại không → click "Yes" để lần sau nhớ term này!
-- Mỗi term có **tags** giúp filter/search later
-
----
-
-## ⏰ TAB 4: DAILY SNAPSHOTS (LỊCH SỬ BRIEFING)
-
-Xem các báo cáo daily briefing từng ngày đã được hệ thống tự động tạo.
-
-### Cách dùng:
-1. Click vào ngày muốn xem → mở Modal hiển thị briefing content đầy đủ
-2. Mỗi snapshot là tóm tắt tin tức + sentiment của ngày đó
-3. Xem lại để so sánh xu hướng thay đổi theo thời gian
-
-### Ví dụ 1 ngày briefing có gì:
-```
-===== BRIEFING — 2026-05-20 =====
-Tỷ giá (Vietcombank): USD/VND Transfer 24.250 | Sell 24.380
-
-TIN TỨC & CẢM_XÚC [43 bài]
-☀️ 20 tích cực | 🔴 15 tiêu cực | ⚪ 8 trung lập
-Xu hướng: Tích cực
-
-1. Vn Economy: Thị trường Chứng khoán giao dịch hết khối lượng...
-   Source: Cafef Doanh nghiệp | ☀️ TÍCH CỰC
-   Tóm tắt: Khối lượng giao dịch tăng 30% so với phiên trước, ...
-
-2. Global Business: Fed giữ nguyên lãi suất 5.25-5.5%...
-   Source: Reuters Business | ⚪ TRUNG LẬP
-   
-... (và 41 bài khác)
-```
-
-💡 **Mẹo:** Dùng tính năng này để theo dõi "bối cảnh" mỗi ngày — ví dụ hôm nay tin tích cực nhiều → xu hướng có thể bullish.
-
----
-
-## 📊 TAB 5: MARKET EVALUATION (ĐÁNH GIÁ TỔNG QUAN)
-
-Tự động generate báo cáo **đánh giá thị trường** dựa trên DỮ LIỆU MỚI NHẤT.
-
-### Tính năng:
-- Fetch dữ liệu real-time từ 7+ nguồn (VN-Index, USD/VND, BTC/ETH/SOL, Gold, DXY, Oil)
-- AI LLM phân tích tổng quan và đưa ra **góc nhìn thị trường hôm nay**
-- Báo cáo có cập nhật tự động mỗi lần mở tab
-
-### Cách dùng:
-1. Mở trang → dữ liệu được fetch ngay lập tức từ Yahoo Finance
-2. Chờ ~5-10 giây để AI phân tích
-3. Đọc báo cáo đánh giá
-
-### Đánh giá thường bao gồm:
-- Thị trường VN đang ở đâu? (tích cực/tiêu cực/trung tính)
--/crypto: BTC/ETH/SOL xu hướng nào?
-- Vàng & dầu: có biến động gì không?  
-- Khuyến nghị short-term cho portfolio
-
-💡 *Tính năng này được tối ưu để luôn dùng dữ liệu FRESH — hệ thống tự refresh cache trước khi generate.*
-
----
-
-## ⭐ TAB 6: WATCHLIST (DANH SÁCH THEO DÕI)
-
-Quản lý danh sách mã cổ phiếu/yêu thích và xem giá real-time.
-
-### Thêm mã vào watchlist:
-1. Mở tab Watchlist
-2. Nhập symbol vào ô "New Symbol": `VNM`, `HPG`, `FPT`... 
-3. Click "Add to Watchlist"
-
-### Xem giá real-time:
-Watchlist hiển thị tự động các thông tin cho từng mã:
-```
-- VNM (Vietnam Dairy)  
-  📈 57.500đ (+1.23%) 
-
-- HPG (Hoa Phat Group)
-  📉 28.900đ (-0.85%)
-
-- BTC (Bitcoin)
-  📈 $84,250 (+2.5%)
-```
-
-### Xóa khỏi watchlist:
-1. Click nút "Remove" bên cạnh mã muốn xóa  
-2. Xác nhận → biến mất khỏi danh sách
-
-💡 **Mẹo hay:** Watchlist hoạt động như một "dashboard mini" — mở lên là thấy giá + % thay đổi của tất cả codes bạn quan tâm mà không cần vào từng tab Analysis.
-
----
-
-## 🖥️ DÙNG QUA CLI (COMMAND LINE)
-
-Nếu thích làm việc terminal hơn, Jarvis Hub có đầy đủ tính năng qua command-line:
-
-### Các lệnh cơ bản:
-```bash
-cd ~/jarvis-hub
-
-# Chạy briefing tin tức buổi sáng
-python cli.py briefing --type morning
-
-# Phân tích 1 mã
-python cli.py analyze VNM
-
-# Xem giá watchlist realtime
-python cli.py watch list
-
-# Tra cứu thuật ngữ
-python cli.py search RSI
-
-# Kiểm tra sức khỏe hệ thống
-python cli.py doctor
-```
-
-> 💡 Gợi ý: Nếu thường dùng, hãy tạo alias trong `~/.zshrc`:  
-> `alias jarvis="cd ~/jarvis-hub && python cli.py"`
-
----
-
-## 🤖 TÍCH HỢP VỚI HERMES AGENT (NÂNG CAO)
-
-Jarvis Hub hỗ trợ **tự động hoá** qua Hermes cron jobs:
-
-### Auto-briefing mỗi sáng (6h18 AM):
-```bash
-jarvis cron job create \
-   --prompt "Run jarvis briefing và gửi kết quả lên Telegram" \
-   --schedule "0 23 * * *" \      # 06:18 GMT+7
-   --name jarvis-morning-briefing
-```
-
-### Auto-analysis mã yêu thích:
-Bạn có thể create nhiều cron jobs để analysis tự động các mã quan trọng mỗi phiên trading.
-
----
-
-## 📋 CHECKLIST SỬ DỤNG HÀNG NGÀY
-
-### Buổi sáng (khi mở máy):
-1. ✅ Mở Jarvis Hub dashboard (http://localhost:8100)
-2. 👀 Nhìn News Feed — nắm tin tức nóng nhất trong ngày
-3. 🔍 Check Watchlist — xem giá các mã mình quan tâm đã biến động ra sao
-4. 📊 Market Evaluation — đọc đánh giá tổng quan thị trường
-
-### Khi muốn phân tích sâu một mã:
-1. ✅ Vào tab Analysis → nhập symbol (vd: `VNM`)
-2. ⏳ Chờ 5-15s cho fetch + LLM generate
-3. 📖 Đọc báo cáo: xu hướng, S/R levels, recommendation
-4. 💡 Click save analysis nếu muốn lưu lại (hoặc nhờ AI generate KB entry)
-
-### Buổi tối (tổng kết ngày):
-1. ✅ Chạy `jarvis briefing --type evening` để có summary ngày hôm nay
-2. 👀 Check Daily Snapshots — xem snapshot tự động đã được tạo chưa
-
----
-
-## ❓ CÂU HỎI THƯỜNG GẶP
-
-### Q: Tại sao giá hiển thị khác với trên website?
-**A:** Jarvis Hub lấy dữ liệu từ Yahoo Finance API — có thể chậm 15-30 phút so với real-time. Đây là giới hạn của free API, không phải lỗi hệ thống.
-
-### Q: LLM analysis report hơi dài, có cách nào ngắn gọn hơn?
-**A:** Report được AI generate tự động theo prompt template chuẩn (Support/Resistance, TA Signals, Recommendation, Catalysts). Để tweak prompt, edit file `app.py` ở phần system prompt (~dòng 377-415).
-
-### Q: Tại sao lần đầu phân tích chậm ~15 giây?
-**A:** Jarvis Hub đang fetch dữ liệu real-time từ Yahoo Finance và gọi Ollama LLM. Lần sau (cùng symbol) sẽ chỉ cache → nhanh hơn ~10x.
-
-### Q: Có thể xuất báo cáo ra file/PDF được không?
-**A:** Hiện tại chưa có tính năng export, nhưng bạn có thể copy-paste content từ modal hoặc CLI output rồi lưu vào text file riêng.
-
-### Q: Dữ liệu tự động cập nhật lúc nào?
-**A:** 
-- Khi cache stale (>12 tiếng hoặc qua ngày mới)
-- Tự động trigger khi mở tab Analysis/Evaluation  
-- Manual: kill server và start lại (`python app.py`)
-
----
-
-## 🔧 troubleshooting cơ bản
-
-| Vấn đề | Cách fix |
-|--------|----------|
-| Không load được web dashboard | Chạy `jarvis doctor` để check Ollama + DB status |
-| LLM analysis không xuất kết quả | Đảm bảo Ollama đang chạy: `ollama serve &` |
-| RSS tin tức không hiển thị | Check internet, hoặc đổi source trong config.yaml |
-| Port 8100 bị chiếm bởi process khác | `lsof -t -i :8100 \| xargs kill -9` rồi start lại |
-
----
-
-## 📞 HỖ TRỢ & CẬP NHẬT
-
-Tài liệu này sẽ được update liên tục khi Jarvis Hub có tính năng mới.  
-Cập nhật lần cuối: **2026-05-22**
-
----
-
-*Chúc bạn giao dịch hiệu quả! 🚀📈*
+*Last updated: 2026-06-28 — reflects all features available in the current v2.0 release.*

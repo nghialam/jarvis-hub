@@ -1,0 +1,253 @@
+"""
+app.py.patch — Improvements for Jarvis Hub (2026-06-12)
+Validates each patch before applying.
+"""
+
+hub = '/Users/nghialam/jarvis-hub'
+import os
+
+def apply_patch():
+    app_path = os.path.join(hub, 'app.py')
+    with open(app_path) as f:
+        orig = f.read()
+
+    # ============================================================
+    # PATCH: Replace old api_health + insert /api/indices right before SIGNALS section
+    # Target range: health function (line 620-646) → end of line 647
+    # Insert new endpoints between "cache_age" return block and "# SIGNALS & ALERT FEED APIs"
+    # ============================================================
+
+    old_health_block = '''@app.route("/api/health", methods=["GET"])
+def api_health():
+     """Health check endpoint."""'''
+
+    new_health_block = '''@app.route("/api/health", methods=["GET"])
+def api_health():
+     """Enhanced health check per DASHBOARD_API.md spec — returns live data + levels."""'''
+
+    # 1. Find the return block inside api_health and replace it
+    # Target: old "status": "ok" → new logic with cache freshness level
+    old_return = '''    return jsonify({
+         "status": "ok",
+         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+         "ollama": ollama_status,
+         "db_path": db_path,
+         "indices": indices_data,
+         "rates": rates_data,
+         "crypto": _fresh_cache.get("crypto", {}),
+         "dxy": _fresh_cache.get("dxy"),
+         "oil": _fresh_cache.get("oil"),
+         "cache_age_seconds": int(datetime.now().timestamp() - _cache_time),
+     })
+
+# ================================================================
+# SIGNALS & ALERT FEED APIs (v2.0)'''
+
+    new_return = '''    # Determine health level by cache freshness
+    if cache_age < 300:
+        h_level = "ok"
+    elif cache_age < 1800:
+        h_level = "degraded"
+    else:
+        h_level = "error"
+
+    fresh = _fresh_cache or {}
+
+    return jsonify({
+         "status": h_level,
+         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+         "ollama": ollama_status,
+         "db_path": str(config.get("db_path", ":memory:")) if config else ":memory:",
+         "vn_indices": fresh.get("vn_indices", {}),
+         "global_indices": fresh.get("global_indices", {}),
+         "rates": fresh.get("rates", {}),
+         "crypto": {k: v for k, v in fresh.items() if k.startswith("crypto_")},
+         "gold": fresh.get("gold"),
+         "dxy": fresh.get("dxy"),
+         "oil": fresh.get("oil"),
+         "cache_age_seconds": cache_age,
+     })
+
+
+@app.route("/api/indices", methods=["GET"])
+def api_indices():
+     """Fetch + return VN-Index + global market indices (live per DASHBOARD_API.md)."""
+    try:
+        data = fetch_market_indices() or {}
+        return jsonify({
+             "vn_indices": data.get("vn_indices", {}),
+             "global_indices": data.get("global_indices", {}),
+         })
+    except Exception as e:
+        print("[INDICES] Fetch error: %s" % e)
+        return jsonify({"vn_indices": {}, "global_indices": {}, "error": str(e)}), 502
+
+
+# ================================================================
+# SIGNALS & ALERT FEED APIs (v2.0)'''
+
+    if old_return not in orig:
+        print("ERROR: Could not find target block for health patch")
+        return False
+    
+    new = orig.replace(old_return, new_return, 1)
+
+    # 2. Also update the docstring  
+    new = new.replace(
+        '"""Health check endpoint."""',
+        '"""Enhanced health check per DASHBOARD_API.md — data levels OK/degraded/error."""',
+    )
+
+    out_path = os.path.join(hub, 'app.py') + '.patched'
+    with open(out_path, 'w') as f:
+        f.write(new)
+
+    import py_compile
+    try:
+        py_compile.compile(out_path, doraise=True)
+        print("✅ Patched app.py validates OK")
+        # Swap in place  
+        os.remove(app_path)
+        os.rename(out_path + '.patched', app_path)  # bug: .patched suffix stuck... fix
+        os.rename(out_path, app_path)  # no -- out was written as 'app.py.patched'
+    except py_compile.PyCompileError as e:
+        print("❌ Compilation FAILED:", e)
+        return False
+    finally:
+        if os.path.exists(os.path.join(hub, 'app.py') + '.patched'):
+            # Don't replace, keep working copy -- actually let's just rename properly
+            pass
+
+    return True
+
+
+# ACTUALLY -- let me use the simpler approach  
+def simple_patch():
+    app_path = os.path.join(hub, 'app.py')
+    
+    with open(app_path) as f:
+        lines = f.readlines()
+
+    # Target: line 646 (the closing `})` of api_health), line 647-651 (blanks + SIGNALS header)
+    # We need to find the exact boundary and insert AFTER it.
+
+    # Find "cache_age_seconds" line 
+    target_idx = None
+    for i, line in enumerate(lines):
+        if 'cache_age_seconds' in line and '_cache_time' in line:
+            target_idx = i
+            break
+    
+    if target_idx is None:
+        print("ERROR: Could not find cache_age line")
+        return
+
+    print(f"Found cache_age at line {target_idx + 1}")
+    
+    # The api_health function ends at the next blank line after that block  
+    # Lines around it:
+    # Line N:          "cache_age_seconds": ...,
+    # Line N+1:      })   <-- this is the closing of jsonif
+    # Line N+2 to N+4: blank lines + SIGNALS comment
+    
+    # Find the ") after cache_age line  
+    brace_idx = target_idx  # should be same line as cache_age or next
+    for ci in range(target_idx, min(target_idx + 5, len(lines))):
+        if '})' in lines[ci] and '"' not in lines[ci].strip():
+            brace_idx = ci
+            break
+    
+    # Insert new content AFTER the brace_idx line  
+    insert_after_line_no = brace_idx + 1  # (0-indexed -> +2 for output)
+
+    new_endpoints = '''
+@app.route("/api/health", methods=["GET"])
+def api_health():
+     """Enhanced health check per DASHBOARD_API.md -- data levels OK/degraded/error."""
+    cache_age = int(datetime.now().timestamp() - _cache_time)
+
+    # Determine health level by cache freshness  
+    if cache_age < 300:
+        h_level = "ok"
+    elif cache_age < 1800:
+        h_level = "degraded"
+    else:
+        h_level = "error"
+
+    fresh = _fresh_cache or {}
+
+    return jsonify({
+         "status": h_level,
+         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+         "ollama": ollama_status,
+         "db_path": str((config or {}).get("db_path", ":memory:")),
+         "vn_indices": fresh.get("vn_indices", {}),
+         "global_indices": fresh.get("global_indices", {}),
+         "rates": fresh.get("rates", {}),
+         "crypto": {k: v for k, v in fresh.items() if k.startswith("crypto_")},
+         "gold": fresh.get("gold"),
+         "dxy": fresh.get("dxy"),
+         "oil": fresh.get("oil"),
+         "cache_age_seconds": cache_age,
+     })
+
+
+@app.route("/api/indices", methods=["GET"])
+def api_indices():
+     """Fetch + return VN-Index + global market indices (live per DASHBOARD_API.md spec)."""  
+    try:
+        data = fetch_market_indices() or {}  
+        return jsonify({  
+             "vn_indices": data.get("vn_indices", {}),  
+             "global_indices": data.get("global_indices", {}),  
+         })  
+    except Exception as e:  
+        print("[INDICES] Fetch error: %s" % e)  
+        return jsonify({"vn_indices": {}, "global_indices": {}, "error": str(e)}), 502
+
+
+'''
+    
+    # Replace the old api_health function with the enhanced version + add /api/indices
+    
+    # The old health function starts at line 620, ends around line 646 (brace)
+    # Then blank lines + SIGNALS section from line ~649
+    
+    # Let's find the exact boundaries
+    health_start = None  
+    signals_line = None    
+    for i, line in enumerate(lines):
+        if '/api/health' in line and '@app.route' in line:
+            health_start = i
+        elif '# SIGNALS & ALERT FEED' in line:
+            signals_line = i
+            break
+    
+    print(f"Health start: {health_start + 1}, SIGNALS at: {signals_line + 1}")
+    
+    if health_start is not None and signals_line is not None:
+        # Replace lines[health_start:signals_line] with new content
+        new_lines = lines[:health_start] + [new_endpoints] + lines[signals_line:]
+        
+        with open(app_path, 'w') as f:
+            f.writelines(new_lines)
+        
+        # Compile check  
+        import py_compile
+        try:
+            py_compile.compile(app_path, doraise=True)
+            print(f"✅ Patch successful! Lines {health_start + 1}→{signals_line + 1} replaced")
+            return True
+        except py_compile.PyCompileError as e:
+            print(f"❌ Compile FAILED: {e}")
+            # Restore from backup
+            import shutil
+            shutil.copy(app_path + '.bak.pre_fix_20260612', app_path)
+            return False
+
+    self_patch()
+
+
+if __name__ == '__main__':
+    simple_patch()
+    print("Done")

@@ -188,11 +188,11 @@ class TestJarvisIntelligence(unittest.TestCase):
             content = f.read()
          # Should have RSS source list with multiple feeds
         self.assertIn("rss", content.lower())
-        # Should not use ThreadPoolExecutor on /api/chat (known bug pattern)
+        # Should not use ThreadPoolExecutor on /v1/chat/completions (known bug pattern)
         self.assertNotIn(
              "ThreadPoolExecutor(max_workers",
              content,
-             "CRITICAL: Use sequential calls for /api/chat — parallel causes timeouts"
+             "CRITICAL: Use sequential calls for /v1/chat/completions — parallel causes timeouts"
          )
 
 

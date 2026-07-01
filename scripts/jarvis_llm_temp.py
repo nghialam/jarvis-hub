@@ -29,7 +29,7 @@ payload = {
 
 req_data = json.dumps(payload).encode("utf-8")
 req = urllib.request.Request(
-    "http://localhost:11434/api/chat", data=req_data,
+    "http://localhost:11434/v1/chat/completions", data=req_data,
     headers={"Content-Type": "application/json"}
 )
 resp = urllib.request.urlopen(req, timeout=120)

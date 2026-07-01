@@ -11,8 +11,8 @@ import json, os, re, sys, time, urllib.request
 from datetime import datetime
 
 CHAT_ID = "-1003801745265"
-OLLAMA_HOST = "http://localhost:11434"
-MODEL_NAME  = "qwen3.6:35b-mlx"
+OMLX_HOST = "http://localhost:11434"
+MODEL_NAME  = "Qwen3.6-35B-A3B-MLX-8bit"
 
 
 def get_token():
@@ -217,8 +217,8 @@ def build_text(articles, ent=False):
 
 # ===== LLM helpers ===== #
 
-def ollama_call(prompt, text_blob, timeout=90):
-    """Call Ollama /api/chat non-streaming. Return cleaned analysis."""
+def omlx_call(prompt, text_blob, timeout=90):
+    """Call OMLX /v1/chat/completions non-streaming. Return cleaned analysis."""
     payload = {
         "model": MODEL_NAME,
         "messages": [
@@ -233,7 +233,7 @@ def ollama_call(prompt, text_blob, timeout=90):
     }
     data = json.dumps(payload).encode()
     try:
-        api_url = f"{OLLAMA_HOST}/api/chat"
+        api_url = f"{OMLX_HOST}/v1/chat/completions"
         req = urllib.request.Request(
             api_url, data=data,
             headers={"Content-Type": "application/json"})
@@ -259,9 +259,9 @@ def ollama_call(prompt, text_blob, timeout=90):
                 else "[No useful result]")
 
     except Exception as e:
-        print(f"[OLLAMA err] {e}")
-        if "11434" in str(e):
-            return "Ollama down"
+        print(f"[OMLX err] {e}")
+        if "8000" in str(e):
+            return "OMLX down"
         return "[Error]"
 
 
@@ -270,11 +270,11 @@ def llm_seq(prompt, text_blob, timeout=90):
     result = ""
     for attempt in range(3):
         try:
-            result = ollama_call(prompt, text_blob,
+            result = omlx_call(prompt, text_blob,
                                  min(timeout, 80))
             ok = (result and len(result) > 50
                   and "Error" not in result[:20]
-                  and "Ollama down" not in result
+                  and "OMLX down" not in result
                   and "down" not in result.lower()[:10])
             if ok:
                 break
@@ -365,7 +365,7 @@ def run():
     # Ollama health check
     try:
         chk     = urllib.request.urlopen(
-            f"{OLLAMA_HOST}/api/ps", timeout=5)
+            f"{OMLX_HOST}/v1/models", timeout=5)
         info    = json.loads(chk.read())
         models  = [m.get("name", "?") for m
                     in info.get("models", [])]

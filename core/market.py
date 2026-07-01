@@ -42,7 +42,16 @@ def _fetch_yahoo_price(symbol):
         if _time.time() - cached['ts'] < _SYMBOL_TTL_SECONDS:
             return cached['data']    # Cache HIT, skip Yahoo entirely
 
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=1mo&interval=1d"
+    # Build symbol for Yahoo URL: preserve .VN, strip US/HK/SG suffixes, auto-append .VN for VN stocks
+    sym_for_url = symbol.upper().strip()
+    # Keep .VN, strip only US/HK/SG suffixes (but not .VN)
+    for sfx in ('.US', '.HK', '.SG'):
+       if sym_for_url.endswith(sfx):
+           sym_for_url = sym_for_url[:-len(sfx)]
+    # Auto-append .VN for Vietnamese stocks that don't have any exchange suffix
+    if not sym_for_url.endswith(('.VN', '.US', '.HK', '.SG', '^')):
+       sym_for_url += ".VN"
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym_for_url}?range=1mo&interval=1d"
 
     # Try with headers to avoid 403 - WITH STRICT TIMEOUT (8s)
     try:
@@ -56,8 +65,16 @@ def _fetch_yahoo_price(symbol):
         r = None
 
     if r is None or r.status_code != 200:
-        # Try without 'chart' path (fallback URL for VN stocks)
-        url2 = f"https://query1.finance.yahoo.com/v7/finance/download/{symbol}?period1=&period2=&interval=1d&events=history"
+         # Try without 'chart' path (fallback URL for VN stocks)
+        sym_for_url2 = symbol.upper().strip()
+         # Keep .VN, strip only US/HK/SG suffixes
+        for sfx in ('.US', '.HK', '.SG'):
+            if sym_for_url2.endswith(sfx):
+                sym_for_url2 = sym_for_url2[:-len(sfx)]
+        # Auto-append .VN for Vietnamese stocks that don't have any exchange suffix
+        if not sym_for_url2.endswith(('.VN', '.US', '.HK', '.SG', '^')):
+            sym_for_url2 += ".VN"
+        url2 = f"https://query1.finance.yahoo.com/v7/finance/download/{sym_for_url2}?period1=&period2=&interval=1d&events=history"
         try:
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
@@ -456,7 +473,7 @@ def calculate_technical_indicators(price_data):
 # --- LLM-powered due diligence report ---------------------------------------
 
 def llm_due_diligence(symbol, price_data, ta):
-    """Generate a mini due diligence report using Ollama."""
+    """Generate a mini due diligence report using OMLX."""
     if price_data.get("type") == "VN":
         lang = "Tieng Viet"
     else:
@@ -481,68 +498,87 @@ def llm_due_diligence(symbol, price_data, ta):
         f"Present in {lang}."
     )
 
-    import core.config as cfg_module
-    config = cfg_module.load_config()
+    # Use OMLX client with retry logic
+    import core.omlx_client as omlx
+    import time as time_mod
 
-    ollama_url = config.get("ollama", {}).get("url", "http://localhost:11434")
-    model = config.get("ollama", {}).get("model", "qwen3.6:latest")
-
-    system_prompt = (
-        "You are an expert financial analyst specializing in market research "
-        "and due diligence. Provide factual, data-driven analysis."
-    )
-
-    # Retry logic: up to 3 attempts with exponential backoff for Ollama calls
     max_retries = 3
-    retry_delay = 2  # seconds
+    retry_delay = 2
 
     for attempt in range(max_retries):
-        try:
-            response = requests_lib.post(
-                f"{ollama_url}/api/chat",
-                json={
-                    "model": model,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": prompt}
-                    ],
-                    "stream": False,
-                    "num_predict": 4096,
-                },
-                timeout=60,  # Increased from 30s to handle large models
-            )
+        result = omlx.omlx_call(prompt, timeout=60)
+        if result:
+            return result
+        if attempt < max_retries - 1:
+            print(f"[WARN] LLM due diligence failed (attempt {attempt+1}/{max_retries}), retrying...", file=sys.stderr)
+            time_mod.sleep(retry_delay * (attempt + 1))
+            continue
 
-            if response.status_code == 200:
-                return response.json().get("message", {}).get("content", "").strip()
-            elif response.status_code >= 500 and attempt < max_retries - 1:
-                print(f"[WARN] LLM server error {response.status_code}, retry {attempt+1}/{max_retries-1}", file=sys.stderr)
-                import time as time_mod
-                time_mod.sleep(retry_delay * (attempt + 1))
-                continue
-            else:
-                print(f"[WARN] LLM request failed with status {response.status_code}", file=sys.stderr)
-                return None
-
-        except Exception as e:
-            if attempt < max_retries - 1:
-                print(f"[WARN] LLM call failed (attempt {attempt+1}/{max_retries}): {e}, retrying...", file=sys.stderr)
-                import time as time_mod
-                time_mod.sleep(retry_delay * (attempt + 1))
-                continue
-            else:
-                print(f"[WARN] LLM due diligence failed after {max_retries} attempts: {e}", file=sys.stderr)
-
+    print(f"[WARN] LLM due diligence failed after {max_retries} attempts", file=sys.stderr)
     return None
-
 
 def analyze_stock(symbol):
     """Main function: fetch, calculate TA, generate report for a stock."""
-    # Auto-append correct suffix based on symbol type
     normalized = symbol.upper()
     
+    # vnstock4 is the PRIMARY source for VN stocks - returns correct VND prices (thousands * 1000)
+    try:
+        from pathlib import Path
+        _venv_path = Path("/Users/nghialam/.hermes/hermes-agent/venv/lib/python3.11/site-packages")
+        if _venv_path.exists():
+            import sys
+            if str(_venv_path) not in sys.path:
+                sys.path.insert(0, str(_venv_path))
+        from vnstock.api.quote import Quote as VsQuote
+        
+        q = VsQuote(symbol=symbol, show_log=False)
+        df = q.history(symbol=symbol, start="2026-04-01", end="2026-07-31")
+        
+        if not df.empty:
+            # vnstock returns prices in "nghin dong" * 1000 for actual VND
+            latest = df.iloc[-1]
+            current_close = float(latest["close"]) * 1000
+            prev_close = (float(df.iloc[-2]["close"]) * 1000) if len(df) > 1 else current_close
+            change = current_close - prev_close
+            change_pct = (change / prev_close * 100) if prev_close > 0 else 0
+            high = float(latest.get("high", current_close)) if "high" in latest and latest["high"] is not None else current_close
+            low = float(latest.get("low", current_close)) if "low" in latest and latest["low"] is not None else current_close
+            volume = int(latest.get("volume", 0)) if "volume" in latest and latest["volume"] is not None else 0
+            
+            price_data = {
+                "symbol": symbol,
+                "name": symbol,     # vnstock does not provide name - set as-is
+                "price": round(current_close, 2),
+                "open": 0.0,        # vnstock daily history may not have open per row
+                "high": round(high, 2),
+                "low": round(low, 2),
+                "volume": volume,
+                "change": round(change, 2),
+                "change_pct": round(change_pct, 2),
+                "currency": "VND",
+                "type": "VN",
+                "historical_closes": [float(c) * 1000 for c in df["close"].tolist() if c is not None],
+                "vnstock_source": True,     # Flag to indicate this came from vnstock
+            }
+            
+            # If we got data from vnstock, calculate TA and return (skip Yahoo fallback)
+            ta_data = calculate_technical_indicators(price_data)
+            price_data["technical"] = ta_data
+            try:
+                llm_report = llm_due_diligence(normalized, price_data, ta_data)
+                price_data["llm_report"] = llm_report
+            except Exception as e:
+                print(f"[WARN] LLM report generation failed: {e}", file=sys.stderr)
+            return price_data
+    except ImportError:
+        pass     # vnstock not available - fall through to Yahoo/Fallback
+    except Exception as _e:
+        pass     # Fetch error - fall through to Yahoo fallback
+
+    # Auto-append correct suffix based on symbol type (Yahoo path)
     if not any(normalized.endswith(sfx) for sfx in ('.VN', '.US', '.HK', '.SG')):
         # Try US market first (most common for non-VN symbols like AAPL, GOOG, etc.)
-        candidates = [f"{normalized}.US", normalized, f"{normalized}.VN"]
+        candidates = [f"{normalized}.US", normalized]     # Removed .VN suffix as fallback
     else:
         candidates = [normalized]
     
@@ -554,7 +590,7 @@ def analyze_stock(symbol):
             print(f"[DEBUG] Trying yahoo fetch for {try_sym}", file=sys.stderr)
             price_data = _fetch_yahoo_price(try_sym)
             if price_data:
-                normalized = try_sym  # Use successful symbol
+                normalized = try_sym    # Use successful symbol
                 break
             else:
                 last_err = f"No data returned"
@@ -580,6 +616,8 @@ def analyze_stock(symbol):
         print(f"[WARN] LLM report generation failed: {e}", file=sys.stderr)
 
     return price_data
+
+
 
 
 def fetch_gold_price():

@@ -335,11 +335,11 @@ def search(query):
         suggestion_prompt = "Explain the financial concept '{}' in Vietnamese, under 200 words. Include definition, examples, and related concepts.".format(query)
         try:
             config = cfg_module.load_config()
-            ollama_url = config.get("ollama", {}).get("url", "http://localhost:11434")
-            model = config.get("ollama", {}).get("model", "qwen3.6:latest")
+            omlx_url = config.get("omlx", {}).get("url", "http://localhost:11434")
+            model = config.get("omlx", {}).get("model", "qwen3.6:latest")
 
             response = requests.post(
-                 "{} /api/chat".format(ollama_url),
+                 "{} /v1/chat/completions".format(omlx_url),
                 json={
                      "model": model,
                      "messages": [
@@ -506,10 +506,10 @@ def doctor():
         config = cfg_module.load_config()
         click.echo("\u2705 Config loaded successfully")
 
-        ollama_url = config.get("ollama", {}).get("url", "http://localhost:11434")
-        ollama_model = config.get("ollama", {}).get("model", "qwen3.6:latest")
-        click.echo("  Ollama endpoint:    {}".format(ollama_url))
-        click.echo("  Model:               {}".format(ollama_model))
+        omlx_url = config.get("omlx", {}).get("url", "http://localhost:11434")
+        omlx_model = config.get("omlx", {}).get("model", "qwen3.6:latest")
+        click.echo("  OMLX endpoint:    {}".format(omlx_url))
+        click.echo("  Model:               {}".format(omlx_model))
     except Exception as e:
         click.echo("! Could not load config: {}".format(e))
 
@@ -525,25 +525,25 @@ def doctor():
     except Exception as e:
         click.echo("! Database error: {}".format(e))
 
-    # Check Ollama connectivity
+    # Check OMLX connectivity
     try:
-        r = requests.get("{} /api/tags".format(ollama_url), timeout=5)
+        r = requests.get("{} /v1/models".format(omlx_url), timeout=5)
 
         if r.status_code == 200:
             models = r.json().get("models", [])
             model_names = [m.get("name", "") for m in models]
 
-            base_model = ollama_model.split(":")[0]
+            base_model = omlx_model.split(":")[0]
             if base_model in " ".join(model_names):
-                click.echo("\u2705 Ollama running - {} models available".format(len(models)))
+                click.echo("✅ OMLX running - {} models available".format(len(models)))
             else:
                 click.echo("! Model '{}' not found. Available: {}".format(
-                    ollama_model, ", ".join(model_names[:5])))
+                    omlx_model, ", ".join(model_names[:5])))
         else:
-            click.echo("- Ollama endpoint returned status {}".format(r.status_code))
+            click.echo("- OMLX endpoint returned status {}".format(r.status_code))
 
     except Exception as e:
-        click.echo("! Could not connect to Ollama: {}".format(e))
+        click.echo("! Could not connect to OMLX: {}".format(e))
 
     # Check RSS sources
     try:

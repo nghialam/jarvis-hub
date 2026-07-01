@@ -93,11 +93,11 @@ def _load_config():
         if cfg_module:
             config = cfg_module.load_config()
         else:
-            config = {"ollama": {"url": "http://localhost:11434", "model": "qwen3.6:35b-a3b-mxfp8"}, "db_path": ":memory:"}
+            config = {"ollama": {"url": "http://localhost:11434", "model": "Qwen3.6-35B-A3B-MLX-8bit"}, "db_path": ":memory:"}
         print("[CFG] Loaded configuration OK")
     except Exception as e:
         print("[CFG] Config load failed: %s" % e)
-        config = {"ollama": {"url": "http://localhost:11434", "model": "qwen3.6:35b-a3b-mxfp8"}, "db_path": ":memory:"}
+        config = {"ollama": {"url": "http://localhost:11434", "model": "Qwen3.6-35B-A3B-MLX-8bit"}, "db_path": ":memory:"}
 
 
 def _load_db():
@@ -210,6 +210,12 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/hub2")
+def hub2():
+    """Jarvis Hub 2.0 — Market Intelligence Portal."""
+    return render_template("hub2.html")
+
+
 @app.route("/api/search", methods=["GET"])
 def api_kb_search():
     """Search knowledge base."""
@@ -218,7 +224,7 @@ def api_kb_search():
     if not query:
         return jsonify({"results": [], "query": "", "total": 0})
     try:
-        results = search_knowledge(query, limit) or []
+        results = (search_knowledge(db, query) if db else []) or []
         return jsonify({"results": results, "query": query, "total": len(results)})
     except Exception as e:
         print("[KB] Search error: %s" % e)
@@ -278,8 +284,8 @@ def api_watchlist_add():
         name = str(data.get("name", "")).strip()
         if len(symbol) < 2:
             return jsonify({"success": False, "error": "Invalid symbol"})
-        if db and hasattr(db, "add_to_watchlist"):
-            added = db.add_to_watchlist(symbol, name)
+        if hasattr(db, "add_watchlist"):
+            added = db.add_watchlist(symbol, name)
             return jsonify({"success": True, "added": added})
         return jsonify({"success": True, "added": symbol})
     except Exception as e:
@@ -346,21 +352,43 @@ def api_daily_snapshot(date):
 
 @app.route("/api/articles", methods=["GET"])
 def api_articles():
-    """Fetch live RSS articles, optionally filtered by category."""
+    """Fetch articles from DB (Tier 1 cron), optionally filtered by category."""
     try:
-        cat_filter = request.args.get("category", "").strip().lower()
-        arts = get_articles(limit=30) or []
-        for a in arts:
-            if _enrich_article:
-                try:
-                    _enrich_article(a)
-                except Exception:
-                    pass
-        if cat_filter:
-            arts = [a for a in arts if a.get("category", "").lower() == cat_filter]
-        return jsonify({"articles": arts[:30], "count": len(arts)})
+        if not db or not hasattr(db, "get_articles"):
+            return jsonify({"articles": [], "count": 0, "note": "DB not initialized"})
+
+        cat_filter = request.args.get("category", "").strip().lower() or None
+        arts = db.get_articles(limit=30, category=cat_filter) or []
+
+        # Map DB record -> dashboard format
+        result = []
+        for a in arts[:30]:
+            entry = {
+                "id": a.get("id"),
+                "title": a.get("title", ""),
+                "summary_raw": a.get("summary_raw", ""),
+                "category": a.get("category", "general"),
+                "sentiment_class": a.get("sentiment", "TRUNG_LAP"),
+                "published": a.get("publication_date", ""),
+                "link": a.get("url", ""),
+            }
+            # Merge news_enhanced data if DB has it
+            try:
+                ne_row = db._c().execute(
+                    "SELECT content, sentiment_score, importance FROM news_enhanced WHERE article_id=?",
+                    (a.get("id"),)
+                ).fetchone()
+                if ne_row:
+                    entry["content"] = ne_row[0] or ""
+                    entry["sentiment_score"] = float(ne_row[1]) if ne_row[1] else 0.0
+                    entry["importancescore"] = float(ne_row[2]) if ne_row[2] else 0.0
+            except Exception:
+                pass
+            result.append(entry)
+
+        return jsonify({"articles": result, "count": len(result), "source": "DB"})
     except Exception as e:
-        print("[ARTICLES] Fetch error: %s" % e)
+        print("[ARTICLES] DB fetch error: %s" % e)
         return jsonify({"articles": [], "error": str(e)[:100]})
 
 
@@ -402,27 +430,27 @@ def api_market_evaluation():
 def _build_llm_prompt(context_text):
     """Build the LLM prompt for evaluation generation."""
     return (
-      "[ROLE]\n"
-      "Chuyen gia phan tich tai chinh va dau tu chung khoan Viet Nam.\n\n"
-      "[DATA]\n"
-      "Dua tren du lieu hien tai:\n%s\n\n"
-      "[OUTPUT REQUIREMENTS]\n"
-      "Hay dua ra ban danh gia thi truong hom nay bang tieng Viet, khoang 400-800 tu. Bao gom:\n\n"
-      "1. TONG QUAN XU HUONG: Danh gia xu huong chinh (bullish/bearish/neutral) + muc do tu tin (1-100%%) + ly do Chinh.\n\n"
-      "2. CHI TIET TUNG PHAM TRU:\n"
-      "   - Stock VN: Xu huong VN-Index, thanh phan sector manh/yeu nhat.\n"
-      "   - Crypto: Top mover 24h, xu huong Bitcoin/ETH.\n"
-      "   - VVBN/Vang: Gia vang hien tai, xu huong.\n"
-      "   - Dau khi/Oil & USD Index/DXY: Di dong chinh va anh huong den VN market.\n\n"
-      "3. RUI RO VA CO HOI:\n"
-      "  - 2-3 rui ro can chu y (internal/external).\n"
-      "  - 2-3 co hoi dau tu co the khai thac.\n\n"
-      "4. KHUYEN NGHI DAU TU:\n"
-      "  - Short-term (1-5 ngay): Actionable recommendation (Mua/Ban/Khoi hold) theo sector/currency.\n"
-      "  - Risk level: Thap/Trung binh/Cao cho moi vung gia tri.\n"
-      "  - Stop-loss suggested level (neu co).\n\n"
-      "[FORMAT]\n"
-      "Sinh ket qua theo duong dan markdown format, su dung bullet poinrs va headers de de doc. KHONG SU DUNG DANH SO 1-2-3-"
+    "[ROLE]\n"
+    "Chuyen gia phan tich tai chinh va dau tu chung khoan Viet Nam.\n\n"
+    "[DATA]\n"
+    "Dua tren du lieu hien tai:\n%s\n\n"
+    "[OUTPUT REQUIREMENTS]\n"
+    "Hay dua ra ban danh gia thi truong hom nay bang tieng Viet, khoang 400-800 tu. Bao gom:\n\n"
+    "1. TONG QUAN XU HUONG: Danh gia xu huong chinh (bullish/bearish/neutral) + muc do tu tin (1-100%%) + ly do Chinh.\n\n"
+    "2. CHI TIET TUNG PHAM TRU:\n"
+    "   - Stock VN: Xu huong VN-Index, thanh phan sector manh/yeu nhat.\n"
+    "   - Crypto: Top mover 24h, xu huong Bitcoin/ETH.\n"
+    "   - VVBN/Vang: Gia vang hien tai, xu huong.\n"
+    "   - Dau khi/Oil & USD Index/DXY: Di dong chinh va anh huong den VN market.\n\n"
+    "3. RUI RO VA CO HOI:\n"
+    "  - 2-3 rui ro can chu y (internal/external).\n"
+    "  - 2-3 co hoi dau tu co the khai thac.\n\n"
+    "4. KHUYEN NGHI DAU TU:\n"
+    "  - Short-term (1-5 ngay): Actionable recommendation (Mua/Ban/Khoi hold) theo sector/currency.\n"
+    "  - Risk level: Thap/Trung binh/Cao cho moi vung gia tri.\n"
+    "  - Stop-loss suggested level (neu co).\n\n"
+    "[FORMAT]\n"
+    "Sinh ket qua theo duong dan markdown format, su dung bullet poinrs va headers de de doc. KHONG SU DUNG DANH SO 1-2-3-"
     )
 
 
@@ -431,11 +459,11 @@ def _call_ollama(prompt):
     from concurrent.futures import ThreadPoolExecutor
 
     ollama_url = (config or {}).get("ollama", {}).get("url", "http://localhost:11434")
-    model = (config or {}).get("ollama", {}).get("model", "qwen3.6:35b-a3b-mxfp8")
+    model = (config or {}).get("ollama", {}).get("model", "Qwen3.6-35B-A3B-MLX-8bit")
 
     try:
         r = requests.post(
-            "%s/api/chat" % ollama_url,
+            "%s/v1/chat/completions" % ollama_url,
             json={
                 "model": model,
                 "messages": [
@@ -619,36 +647,77 @@ def api_eval_history():
 
 @app.route("/api/health", methods=["GET"])
 def api_health():
-    """Health check endpoint."""
+    """Enhanced health per DASHBOARD_API.md - data levels OK/degraded/error."""
     ollama_status = "unknown"
     try:
-        base_url = (config or {}).get("ollama", {}).get("url", "http://localhost:11434") if config else "http://localhost:11434"
-        r = requests.get(base_url + "/api/tags", timeout=5)
+        base_url = (config or {}).get("ollama", {}).get(
+            "url", "http://localhost:11434"
+        ) if config else "http://localhost:11434"
+        r = requests.get(base_url + "/v1/models", timeout=5)
         ollama_status = "online" if r.status_code == 200 else "offline"
     except Exception as e:
         ollama_status = "error: %s" % str(e)[:40]
 
-    db_path = str(config.get("db_path", "N/A")) if config else "N/A"
-    indices_data = _fresh_cache.get("vn_indices", {}) or {}
-    rates_data = _fresh_cache.get("rates", {}) or {}
+    cache_age = int(datetime.now().timestamp() - _cache_time)
+
+    # Determine health level by cache freshness
+    if cache_age < 300:
+        h_level = "ok"
+    elif cache_age < 1800:
+        h_level = "degraded"
+    else:
+        h_level = "error"
+
+    fresh = _fresh_cache or {}
 
     return jsonify({
-        "status": "ok",
+        "status": h_level,
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
         "ollama": ollama_status,
-        "db_path": db_path,
-        "indices": indices_data,
-        "rates": rates_data,
-        "crypto": _fresh_cache.get("crypto", {}),
-        "dxy": _fresh_cache.get("dxy"),
-        "oil": _fresh_cache.get("oil"),
-        "cache_age_seconds": int(datetime.now().timestamp() - _cache_time),
+        "db_path": str((config or {}).get("db_path", ":memory:")),
+        "vn_indices": fresh.get("vn_indices", {}),
+        "global_indices": fresh.get("global_indices", {}),
+        "rates": fresh.get("rates", {}),
+        "crypto": {k: v for k, v in fresh.items() if k.startswith("crypto_")},
+        "gold": fresh.get("gold"),
+        "dxy": fresh.get("dxy"),
+        "oil": fresh.get("oil"),
+        "cache_age_seconds": cache_age,
     })
 
 
-# ================================================================
-# SIGNALS & ALERT FEED APIs (v2.0)
-# ================================================================
+@app.route("/api/indices", methods=["GET"])
+def api_indices():
+    """Fetch + return VN-Index + global market indices from DB."""
+    try:
+        if not db or not hasattr(db, "get_latest_overview"):
+            return jsonify({
+                "vn_indices": {},
+                "global_indices": {},
+                "note": "DB not initialized — run Tier 1 data collection first"
+            })
+        overview = db.get_latest_overview() or {}
+        vn_idx = overview.get("vn_indices", {}) or overview.get("VN-Index", {}) or {}
+        glb = overview.get("global_indices", {}) or overview.get("Global", {}) or {}
+        # Also try fallback from market_overview table
+        if not vn_idx:
+            for row in db._c().execute(
+                "SELECT symbol, price, change_pct FROM market_overview WHERE asset_type='index'").fetchall():
+                vn_idx[row[0]] = {"price": row[1], "change_pct": row[2]}
+        if not glb:
+            for row in db._c().execute(
+                "SELECT symbol, price, change_pct FROM market_overview WHERE asset_type IN ('global','fx')").fetchall():
+                glb[row[0]] = {"price": row[1], "change_pct": row[2]}
+        return jsonify({
+            "vn_indices": vn_idx,
+            "global_indices": glb,
+            "source": "DB",
+            "updated_at": overview.get("updated_at", ""),
+        })
+    except Exception as e:
+        print("[INDICES] DB fetch error: %s" % e)
+        return jsonify({"vn_indices": {}, "global_indices": {}, "error": str(e)}), 502
+
 
 
 @app.route("/api/signals", methods=["GET"])
@@ -670,8 +739,8 @@ def api_get_signals():
         try:
             rows = db._c().execute("""
                 SELECT id, symbol, 'TRADING_BOT' as source, signal_type,
-                       CAST(strength AS TEXT) as severity, price, details,
-                       detected_at as timestamp, delivered as is_delivered, delivery_channel
+                    CAST(strength AS TEXT) as severity, price, details,
+                    detected_at as timestamp, delivered as is_delivered, delivery_channel
                 FROM signals_log WHERE 1=1
             """).fetchall()
             for row in rows:
@@ -689,10 +758,10 @@ def api_get_signals():
         try:
             rows = db._c().execute("""
                 SELECT id, symbol, 'AUTO_SCAN' as source, signal_type, severity AS severity,
-                       CAST(alert_data->>'price' AS REAL) as price, alert_data,
-                       timestamp as detected_at,
-                       CASE WHEN status='read' THEN 1 ELSE 0 END as is_delivered,
-                       delivery_channel FROM trading_alerts
+                    CAST(alert_data->>'price' AS REAL) as price, alert_data,
+                    timestamp as detected_at,
+                    CASE WHEN status='read' THEN 1 ELSE 0 END as is_delivered,
+                    delivery_channel FROM trading_alerts
             """).fetchall()
             for row in rows:
                 r = dict(row)
@@ -768,9 +837,9 @@ def api_latest_signals():
         try:
             rows = db._c().execute("""
                 SELECT symbol, 'TRADING_BOT' AS source, signal_type, CAST(strength AS REAL) as strength,
-                       price, details, detected_at, delivered as is_delivered, delivery_channel
+                    price, details, detected_at, delivered as is_delivered, delivery_channel
                 FROM signals_log ORDER BY detected_at DESC LIMIT 50
-             """).fetchall()
+            """).fetchall()
             for row in rows:
                 r = dict(row)
                 if isinstance(r.get("details"), str):
@@ -786,11 +855,11 @@ def api_latest_signals():
         try:
             rows = db._c().execute("""
                 SELECT symbol, 'AUTO_SCAN' AS source, signal_type, severity as strength,
-                       CAST(alert_data->>'price' AS REAL) as price, alert_data as details,
-                       timestamp as detected_at,
-                       CASE WHEN status='read' THEN 1 ELSE 0 END AS is_delivered, delivery_channel
+                    CAST(alert_data->>'price' AS REAL) as price, alert_data as details,
+                    timestamp as detected_at,
+                    CASE WHEN status='read' THEN 1 ELSE 0 END AS is_delivered, delivery_channel
                 FROM trading_alerts ORDER BY timestamp DESC LIMIT 50
-             """).fetchall()
+            """).fetchall()
             for row in rows:
                 r = dict(row)
                 raw = r.get("details")
@@ -825,8 +894,8 @@ def api_signal_for_symbol(symbol):
     try:
         rows = db._c().execute("""
             SELECT symbol, 'TRADING_BOT', signal_type, CAST(strength AS REAL) as strength,
-                   price, details, detected_at, delivered as is_delivered, delivery_channel
-           FROM signals_log WHERE UPPER(symbol)=UPPER(?) ORDER BY detected_at DESC
+                price, details, detected_at, delivered as is_delivered, delivery_channel
+        FROM signals_log WHERE UPPER(symbol)=UPPER(?) ORDER BY detected_at DESC
         """, (sym,)).fetchall()
         for row in rows:
             r = dict(row)
@@ -843,10 +912,10 @@ def api_signal_for_symbol(symbol):
     try:
         rows = db._c().execute("""
             SELECT symbol, 'AUTO_SCAN', signal_type, severity as strength,
-                   CAST(alert_data->>'price' AS REAL) as price, alert_data as details,
-                   timestamp as detected_at,
-                   CASE WHEN status='read' THEN 1 ELSE 0 END AS is_delivered, delivery_channel
-           FROM trading_alerts WHERE UPPER(symbol)=UPPER(?) ORDER BY timestamp DESC
+                CAST(alert_data->>'price' AS REAL) as price, alert_data as details,
+                timestamp as detected_at,
+                CASE WHEN status='read' THEN 1 ELSE 0 END AS is_delivered, delivery_channel
+        FROM trading_alerts WHERE UPPER(symbol)=UPPER(?) ORDER BY timestamp DESC
         """, (sym,)).fetchall()
         for row in rows:
             r = dict(row)
@@ -886,9 +955,9 @@ def api_signal_append():
     try:
         db._c().execute("""
             INSERT INTO signals_log (symbol, signal_type, strength, price, details, detected_at)
-             VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?)
         """, (sym, signal_type if signal_type else "NEUTRAL", strength,
-              data.get("price"), json.dumps(details), _utc_now_iso()))
+            data.get("price"), json.dumps(details), _utc_now_iso()))
         db._conn.commit()
         print("[SIGNALS] Added %s: %s (%.1f)" % (sym, signal_type, strength))
         return jsonify({"success": True})
@@ -983,7 +1052,7 @@ def trigger_alert(sym, signal_type, data_obj):
 
         db._c().execute("""
             INSERT INTO trading_alerts (symbol, signal_type, severity, alert_data, timestamp, status)
-             VALUES (?, ?, 'MEDIUM', ?, datetime('now'), 'pending')
+            VALUES (?, ?, 'MEDIUM', ?, datetime('now'), 'pending')
         """, (sym.upper(), signal_type, raw_json))
         db._conn.commit()
         return True
@@ -1106,6 +1175,621 @@ def api_clear_alert_feed():
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
+
+
+@app.route("/api/signal/feed/clear", methods=["POST"])
+def api_signal_feed_clear_alias():
+    """Alias for /api/alert-feed/clear to match DASHBOARD_API.md spec."""
+    return api_clear_alert_feed()
+
+@app.route("/api/auto-scan", methods=["GET"])
+def api_autoscan_alias():
+    """Alias for /api/alert-feed/auto-scan to match DASHBOARD_API.md spec."""
+    return api_auto_scan()
+
+
+# ============================================================================
+#  HUB 2.0 API — /api/v1/*
+# ============================================================================
+
+@app.route("/health", methods=["GET"])
+def api_health_v2():
+    """Hub 2.0 health check endpoint."""
+    health = {
+        "status": "ok",
+        "timestamp": datetime.now().isoformat(),
+        "flask": "running",
+        "db": "connected" if db else "disconnected",
+        "ollama": "unknown",
+    }
+    try:
+        cfg = __import__("core.config", fromlist=["load_config"]).load_config()
+        ollama_url = cfg.get("ollama", {}).get("url", "http://localhost:11434")
+        r = requests.get(f"{ollama_url}/api/tags", timeout=5)
+        health["ollama"] = "healthy" if r.status_code == 200 else "unhealthy"
+    except Exception:
+        health["ollama"] = "unreachable"
+    return jsonify(health)
+
+
+# --- Overview API ---
+
+
+# ============================================================================
+#  SYSTEM LOGS ENDPOINT
+# ============================================================================
+
+@app.route("/logs", methods=["GET"])
+def get_logs():
+    """Get system logs from activity_log and signals_log tables."""
+    try:
+        import sqlite3
+        db_path = str((config or {}).get("db_path", "/Users/nghialam/jarvis-hub/knowledge/jarvis.db"))
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+        
+        results = {}
+        
+        # Activity logs (system commands, CLI runs)
+        try:
+            cur.execute("SELECT * FROM activity_log ORDER BY timestamp DESC LIMIT 100")
+            rows = cur.fetchall()
+            cols = [desc[0] for desc in cur.description] if cur.description else []
+            results["activity_logs"] = {
+                "count": len(rows),
+                "columns": cols, 
+                "data": [dict(zip(cols, r)) for r in rows]
+            }
+        except Exception as e:
+            results["activity_logs"] = {"error": str(e)}
+        
+        # Signal logs (market signals)  
+        try:
+            cur.execute("SELECT * FROM signals_log ORDER BY detected_at DESC LIMIT 200")
+            rows = cur.fetchall()
+            cols = [desc[0] for desc in cur.description] if cur.description else []
+            results["signal_logs"] = {
+                "count": len(rows),
+                "columns": cols,
+                "data": [dict(zip(cols, r)) for r in rows]
+            }
+        except Exception as e:
+            results["signal_logs"] = {"error": str(e)}
+            
+        # Trading alerts  
+        try:
+            cur.execute("SELECT * FROM trading_alerts ORDER BY timestamp DESC LIMIT 100")
+            rows = cur.fetchall()
+            cols = [desc[0] for desc in cur.description] if cur.description else []
+            results["trading_alerts"] = {
+                "count": len(rows),
+                "columns": cols,
+                "data": [dict(zip(cols, r)) for r in rows]  
+            }
+        except Exception as e:
+            results["trading_alerts"] = {"error": str(e)}
+
+        conn.close()
+        
+        return jsonify({"status": "ok", "logs": results})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+
+@app.route("/api/v1/overview", methods=["GET"])
+def api_overview():
+    """Get full market overview (indices, crypto, gold, oil, dxy)."""
+    try:
+        import core.market_overview as mo
+        data = mo.fetch_all_overview()
+        # Also add top motions
+        try:
+            data["top_motions"] = mo.get_top_motions(limit=10)
+        except Exception:
+            pass
+        return jsonify({"status": "ok", "data": data})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/overview/indices", methods=["GET"])
+def api_overview_indices():
+    """Get market indices (VN + global)."""
+    try:
+        import core.market_overview as mo
+        vn = mo.fetch_vn_indices()
+        global_idx = mo.fetch_global_indices()
+        # Convert dicts to arrays for frontend
+        vn_list = []
+        for name, data in (vn or {}).items():
+            vn_list.append({**data, "name": name, "symbol": data.get("symbol", name)})
+        global_list = []
+        for name, data in (global_idx or {}).items():
+            global_list.append({**data, "name": name, "symbol": data.get("symbol", name)})
+        return jsonify({"status": "ok", "vn": vn_list, "global": global_list})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/overview/crypto", methods=["GET"])
+def api_overview_crypto():
+    """Get crypto prices."""
+    try:
+        import core.market_overview as mo
+        data = mo.fetch_crypto()
+        # Convert dict to array for frontend
+        crypto_list = []
+        for name, d in (data or {}).items():
+            crypto_list.append({**d, "name": name, "symbol": d.get("symbol", name)})
+        return jsonify({"status": "ok", "data": crypto_list})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/overview/gold", methods=["GET"])
+def api_overview_gold():
+    """Get gold price."""
+    try:
+        import core.market_overview as mo
+        data = mo.fetch_gold()
+        return jsonify({"status": "ok", "data": data})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/overview/motions", methods=["GET"])
+def api_overview_motions():
+    """Get top gainers/losers."""
+    try:
+        import core.market_overview as mo
+        symbols = request.args.get("symbols", "").split(",") if request.args.get("symbols") else None
+        data = mo.get_top_motions(symbols=symbols, limit=int(request.args.get("limit", 10)))
+        # Flatten gainers + losers into one array for frontend
+        flat = []
+        if isinstance(data, dict):
+            flat.extend(data.get("gainers", []) or [])
+            flat.extend(data.get("losers", []) or [])
+        elif isinstance(data, list):
+            flat = data
+        return jsonify({"status": "ok", "data": flat})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/overview/chart", methods=["GET"])
+def api_overview_chart():
+    """Get chart data for a symbol."""
+    symbol = request.args.get("symbol", "")
+    if not symbol:
+        return jsonify({"status": "error", "error": "Missing symbol"}), 400
+    try:
+        import core.market_overview as mo
+        data = mo._fetch_yahoo_price(symbol)
+        return jsonify({"status": "ok", "data": data})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+# --- News Hub API ---
+
+@app.route("/api/v1/news", methods=["GET"])
+def api_news_list():
+    """Get enhanced news with filters."""
+    try:
+        category = request.args.get("category", "all")
+        sentiment = request.args.get("sentiment", "all")
+        limit = int(request.args.get("limit", 50))
+        days = int(request.args.get("days", 7))
+
+        if db and hasattr(db, "get_news_enhanced"):
+            articles = db.get_news_enhanced(
+                category=category,
+                sentiment=sentiment,
+                limit=limit,
+                timeframe_days=days,
+            )
+        else:
+            # Fallback to existing news fetch
+            import core.news_service as ns
+            articles = ns.get_articles(limit=limit)
+
+        return jsonify({"status": "ok", "count": len(articles), "articles": articles})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/news/trending", methods=["GET"])
+def api_news_trending():
+    """Get trending (high-importance) news."""
+    try:
+        if db and hasattr(db, "get_trending_news"):
+            articles = db.get_trending_news(limit=10)
+        return jsonify({"status": "ok", "count": len(articles), "articles": articles})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+# --- Company API ---
+
+@app.route("/api/v1/companies", methods=["GET"])
+def api_companies():
+    """Search companies by symbol or name."""
+    query = request.args.get("q", "").strip()
+    if not query:
+        return jsonify({"status": "ok", "count": 0, "companies": []})
+    try:
+        if db and hasattr(db, "_c"):
+            rows = db._c().execute(
+                """SELECT DISTINCT symbol, name FROM portfolio_watchlist
+                WHERE UPPER(symbol) LIKE ? OR UPPER(name) LIKE ?
+                LIMIT 50""",
+                ("%" + query.upper() + "%", "%" + query.upper() + "%")).fetchall()
+        else:
+            rows = []
+        companies = [dict(r) for r in rows]
+        return jsonify({"status": "ok", "count": len(companies), "companies": companies})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/companies/<symbol>/news", methods=["GET"])
+def api_company_news(symbol):
+    """Get news for a specific company."""
+    try:
+        if db and hasattr(db, "get_news_enhanced"):
+            # Search articles by affected_symbols or title
+            rows = db._c().execute(
+                """SELECT * FROM news_enhanced
+                WHERE affected_symbols LIKE ? OR title LIKE ?
+                AND published_at >= datetime('now', '-30 days')
+                ORDER BY importance DESC, published_at DESC
+                LIMIT 20""",
+                ("%" + symbol.upper() + "%", "%" + symbol.upper() + "%")).fetchall()
+        else:
+            rows = []
+        articles = [dict(r) for r in rows]
+        return jsonify({"status": "ok", "count": len(articles), "articles": articles})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+# --- Research Hub API ---
+
+@app.route("/api/v1/research", methods=["GET"])
+def api_research():
+    """Get brokerage reports with filters."""
+    try:
+        broker = request.args.get("broker", "all")
+        period = request.args.get("period", "1m")
+        limit = int(request.args.get("limit", 20))
+
+        if db and hasattr(db, "get_brokerage_reports"):
+            reports = db.get_brokerage_reports(broker=broker, period=period, limit=limit)
+        else:
+            reports = []
+        return jsonify({"status": "ok", "count": len(reports), "reports": reports})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/research/stats", methods=["GET"])
+def api_research_stats():
+    """Get report stats per broker."""
+    try:
+        if db and hasattr(db, "get_brokerage_stats"):
+            stats = db.get_brokerage_stats()
+        else:
+            stats = []
+        return jsonify({"status": "ok", "stats": stats})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/research/crawl", methods=["POST"])
+def api_research_crawl():
+    """Trigger a research crawl."""
+    try:
+        import core.research_crawler as rc
+        result = rc.run_crawl_and_store(db=db)
+        return jsonify({"status": "ok", "result": result})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+# --- Portfolio Watchlist API ---
+
+@app.route("/api/v1/watchlist/portfolio", methods=["GET"])
+def api_portfolio_watchlist():
+    """Get portfolio watchlist."""
+    try:
+        if db and hasattr(db, "get_portfolio_watchlist"):
+            items = db.get_portfolio_watchlist()
+        else:
+            items = []
+        return jsonify({"status": "ok", "count": len(items), "watchlist": items})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/watchlist/portfolio/add", methods=["POST"])
+def api_portfolio_watchlist_add():
+    """Add to portfolio watchlist."""
+    try:
+        data = request.get_json() or {}
+        symbol = str(data.get("symbol", "")).strip().upper()
+        name = str(data.get("name", "")).strip()
+        sector = str(data.get("sector", "")).strip()
+        if len(symbol) < 2:
+            return jsonify({"status": "error", "error": "Invalid symbol"})
+        if db and hasattr(db, "add_portfolio_watchlist"):
+            db.add_portfolio_watchlist(symbol, name, sector)
+        return jsonify({"status": "ok", "symbol": symbol})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/watchlist/portfolio/remove", methods=["POST"])
+def api_portfolio_watchlist_remove():
+    """Remove from portfolio watchlist."""
+    try:
+        data = request.get_json() or {}
+        symbol = str(data.get("symbol", "")).strip().upper()
+        if db and hasattr(db, "remove_portfolio_watchlist"):
+            db.remove_portfolio_watchlist(symbol)
+        return jsonify({"status": "ok", "symbol": symbol})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+# --- Sector Heatmap API ---
+
+@app.route("/api/v1/market/heatmap", methods=["GET"])
+def api_sector_heatmap():
+    """Get sector performance heatmap data."""
+    try:
+        import core.market_overview as mo
+        # Get top movers and compute sector-level aggregates
+        motions = mo.get_top_motions(limit=50)
+        if not motions:
+            return jsonify({"status": "ok", "sectors": []})
+
+        # Group by sector if available, otherwise by performance buckets
+        sectors = {}
+        gainers = motions.get("gainers", []) or []
+        losers = motions.get("losers", []) or []
+
+        for stock in gainers + losers:
+            sector = stock.get("sector", "Unknown")
+            if sector not in sectors:
+                sectors[sector] = {"gainers": 0, "losers": 0, "avg_change": 0, "total": 0, "stocks": []}
+            pct = stock.get("change_pct", 0)
+            if pct >= 0:
+                sectors[sector]["gainers"] += 1
+            else:
+                sectors[sector]["losers"] += 1
+            sectors[sector]["total"] += 1
+            sectors[sector]["stocks"].append({
+                "symbol": stock.get("symbol", ""),
+                "change_pct": pct,
+                "price": stock.get("price", ""),
+            })
+
+        # Compute average change per sector
+        for sector in sectors:
+            stocks = sectors[sector]["stocks"]
+            if stocks:
+                sectors[sector]["avg_change"] = round(
+                    sum(s["change_pct"] for s in stocks) / len(stocks), 2
+                )
+
+        # Convert to list and sort by avg_change
+        sector_list = [
+            {
+                "name": name,
+                "avg_change": data["avg_change"],
+                "gainers": data["gainers"],
+                "losers": data["losers"],
+                "total": data["total"],
+                "stocks": data["stocks"][:5],  # top 5 stocks per sector
+            }
+            for name, data in sectors.items()
+        ]
+        sector_list.sort(key=lambda x: x["avg_change"], reverse=True)
+
+        return jsonify({"status": "ok", "sectors": sector_list})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+# --- Auto Refresh API ---
+
+@app.route("/api/v1/market/auto-refresh/trigger", methods=["POST"])
+def api_auto_refresh_trigger():
+    """Manually trigger a data refresh."""
+    try:
+        _refresh_data()
+        return jsonify({
+            "status": "ok",
+            "message": "Refresh triggered",
+            "cache_age": 0,
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+# --- LLM News Scoring API ---
+
+@app.route("/api/v1/news/score", methods=["POST"])
+def api_news_score():
+    """Score news articles using LLM for importance."""
+    try:
+        if not config:
+            return jsonify({"status": "error", "error": "Config not loaded"}), 503
+
+        # Get un-scored or low-scored articles
+        if db and hasattr(db, "get_news_enhanced"):
+            articles = db.get_news_enhanced(sentiment="all", limit=20, timeframe_days=1)
+        else:
+            articles = []
+
+        if not articles:
+            return jsonify({"status": "ok", "scored": 0, "articles": []})
+
+        # Build prompt for LLM scoring
+        scored_articles = []
+        for article in articles:
+            title = article.get("title", "")
+            summary = article.get("summary", "") or article.get("content", "") or ""
+            source = article.get("source", "")
+            category = article.get("category", "")
+
+            prompt = (
+                "You are a Vietnamese financial market analyst. Score this news article's importance "
+                "for Vietnam stock market investors on a scale of 1-10 (1=trivial, 10=critical).\n\n"
+                f"Title: {title}\n"
+                f"Summary: {summary[:500]}\n"
+                f"Source: {source}\n"
+                f"Category: {category}\n\n"
+                "Return ONLY a JSON object with keys: importance (1-10), reason (short string).\n"
+                "Examples: {\"importance\": 8, \"reason\": \"Directly impacts banking sector liquidity\"}"
+            )
+
+            try:
+                ollama_url = (config or {}).get("ollama", {}).get("url", "http://localhost:11434")
+                model = (config or {}).get("ollama", {}).get("model", "Qwen3.6-35B-A3B-MLX-8bit")
+                r = requests.post(
+                    f"{ollama_url}/v1/chat/completions",
+                    json={
+                        "model": model,
+                        "messages": [
+                            {"role": "system", "content": "Ban la chuyen gia phan tich tai chinh. Tra loi bang JSON."},
+                            {"role": "user", "content": prompt},
+                        ],
+                        "stream": False,
+                        "options": {"num_predict": 200, "temperature": 0.3},
+                    },
+                    timeout=30,
+                )
+                if r.status_code == 200:
+                    resp = r.json()
+                    content = resp.get("message", {}).get("content", "")
+                    # Try to parse JSON from response
+                    import re as _re
+                    json_match = _re.search(r'\{[^}]*"importance"[^}]*\}', content)
+                    if json_match:
+                        score_data = json.loads(json_match.group())
+                        article["importance"] = score_data.get("importance", 5)
+                        article["importance_reason"] = score_data.get("reason", "")
+                        scored_articles.append(article)
+                        # Save to DB if possible
+                        if db and hasattr(db, "update_news_importance"):
+                            try:
+                                db.update_news_importance(article.get("id"), article["importance"], article["importance_reason"])
+                            except Exception:
+                                pass
+            except Exception as e:
+                print(f"[SCORE] Error scoring article {article.get('id', '?')}: {e}")
+                article["importance"] = 5  # default
+                scored_articles.append(article)
+
+        return jsonify({
+            "status": "ok",
+            "scored": len(scored_articles),
+            "articles": scored_articles,
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+# --- AI Intelligence API (v2) ---
+
+@app.route("/api/v2/ai-intelligence/daily-list", methods=["GET"])
+def ai_intelligence_daily_list():
+    """Return list of all run dates with article counts + summary."""
+    try:
+        if db and hasattr(db, "get_run_chains"):
+            runs = db.get_run_chains(limit=30)
+        else:
+            runs = []
+
+        result = []
+        for run in runs:
+            try:
+                art_count = 0
+                if db and hasattr(db, "get_articles"):
+                    arts = db.get_articles(run_id=run.get("run_id"))
+                    art_count = len(arts)
+            except Exception:
+                art_count = 0
+
+            result.append({
+                "run_id": run.get("run_id"),
+                "date": run.get("pipeline_date"),
+                "article_count": art_count,
+                "total_articles": run.get("total_articles", art_count),
+                "total_sources": run.get("total_sources", 0),
+                "chain_1_summary": (run.get("llm_chain_1_summary", "") or "")[:200],
+                "status": run.get("status", "complete"),
+            })
+        return jsonify({"status": "ok", "count": len(result), "runs": result})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v2/ai-finance/run/<run_id>", methods=["GET"])
+def ai_intelligence_run_detail(run_id):
+    """Return ALL data for one specific run — articles, recommendations, and metadata."""
+    try:
+        run_data = None
+        articles = []
+        recommendations = []
+
+        if db:
+            if hasattr(db, "get_run_chain"):
+                run_data = db.get_run_chain(run_id)
+            if hasattr(db, "get_articles"):
+                articles = db.get_articles(run_id=run_id, limit=200)
+            if hasattr(db, "get_recommendations"):
+                recommendations = db.get_recommendations(run_id=run_id, limit=100)
+
+        return jsonify({
+            "status": "ok",
+            "run_id": run_id,
+            "run_data": run_data,
+            "articles": articles,
+            "article_count": len(articles),
+            "recommendations": recommendations,
+            "recommendation_count": len(recommendations),
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v2/ai-finance/health", methods=["GET"])
+def ai_intelligence_health():
+    """Return pipeline health + last run status."""
+    try:
+        total_runs = 0
+        last_run = None
+        daily_avg = 0
+
+        if db and hasattr(db, "get_run_chains"):
+            runs = db.get_run_chains(limit=100)
+            total_runs = len(runs)
+            if runs:
+                last_run = runs[0].get("pipeline_date")
+                total_art = sum(r.get("total_articles", 0) for r in runs)
+                daily_avg = round(total_art / max(total_runs, 1))
+
+        return jsonify({
+            "status": "ok",
+            "last_run_date": last_run,
+            "total_runs_saved": total_runs,
+            "daily_avg_articles": daily_avg,
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
 
 
 

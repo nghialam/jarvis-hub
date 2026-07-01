@@ -175,8 +175,8 @@ status, data = api_call("/api/health")
 if status == 200 and isinstance(data, dict):
     test("Health: Server is running", True, f"timestamp={data.get('timestamp')}")
     test("Health: Ollama connected", 
-         "online" in str(data.get("ollama", "")),
-         f"status={data.get('ollama')}")
+         "online" in str(data.get("omlx", "")),
+         f"status={data.get('omlx')}")
     
     cache_age = data.get("cache_age_seconds")
     if cache_age is not None:

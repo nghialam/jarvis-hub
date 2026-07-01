@@ -39,8 +39,8 @@ def _get_token():
 
 
 BOT_TOKEN = _get_token()
-OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
-LLM_MODEL = os.environ.get("LLM_MODEL", "qwen3.6:35b-a3b-mxfp8")
+OMLX_URL = os.environ.get("OMLX_HOST", "http://localhost:11434")
+LLM_MODEL = os.environ.get("LLM_MODEL", "Qwen3.6-35B-A3B-MLX-8bit")
 
 RSS_SOURCES = [
     {"name": "CafeF Doanh Nghiep", "url": "https://cafef.vn/doanh-nghiep.rss", "section": "VN"},
@@ -57,7 +57,7 @@ RSS_SOURCES = [
 # ===================================================================
 
 def get_llm(system_prompt, user_prompt, timeout=360):
-    """Call Ollama /api/chat non-streaming. Retries 3x."""
+    """Call Ollama /v1/chat/completions non-streaming. Retries 3x."""
     payload = {
         "model": LLM_MODEL,
         "messages": [
@@ -71,7 +71,7 @@ def get_llm(system_prompt, user_prompt, timeout=360):
     for attempt in range(3):
         try:
             req = urllib.request.Request(
-                f"{OLLAMA_URL}/api/chat", data=req_data,
+                f"{OMLX_URL}/v1/chat/completions", data=req_data,
                 headers={"Content-Type": "application/json"}
             )
             resp = urllib.request.urlopen(req, timeout=timeout)

@@ -66,14 +66,14 @@ def api_articles():
 
 @app.route("/api/health", methods=["GET"])
 def api_health():
-    ollama_status = "unknown"
+    omlx_status = "unknown"
     try:
         import requests
-        base_url = config.get("ollama", {}).get("url", "http://localhost:11434") if config else "http://localhost:11434"
-        r = requests.get(base_url + "/api/tags", timeout=5)
-        ollama_status = "online" if r.status_code == 200 else "offline"
+        base_url = config.get("omlx", {}).get("url", "http://localhost:11434") if config else "http://localhost:11434"
+        r = requests.get(base_url + "/health", timeout=5)
+        omlx_status = "online" if r.status_code == 200 else "offline"
     except Exception as e:
-        ollama_status = "error: %s" % str(e)[:40]
+        omlx_status = "error: %s" % str(e)[:40]
 
     db_path = str(config.get("db_path", "N/A")) if config else "N/A"
 
@@ -90,7 +90,7 @@ def api_health():
     return jsonify({
          "status": "ok",
          "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
-         "ollama": ollama_status,
+         "omlx": omlx_status,
          "db_path": db_path,
          "indices": indices_data,
          "rates": rates_data,

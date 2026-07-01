@@ -58,7 +58,7 @@ def detect_patterns(entries):
     categories = {
          "API_errors": ["api", "endpoint", "request", "response", "timeout"],
          "Indentation_corruption": ["indent", "bracket", "parse", "corrupt", "patch"],
-         "Ollama_issues": ["ollama", "model", "chat", "api/chat"],
+         "Ollama_issues": ["omlx", "model", "chat", "api/chat"],
          "Flask_issues": ["flask", "server", "port", "debug", "reload"],
          "Cron_reliability": ["cron", "scheduled", "schedule", "timer"],
          "Telegram_delivery": ["telegram", "delivery", "channel", "message"],

@@ -17,8 +17,8 @@ except ImportError:
 
 # Constants
 CHAT_ID = os.environ.get("JARVIS_TELEGRAM_CHAT_ID", "-1003801745265")
-LLM_MODEL = os.environ.get("LLM_MODEL", "qwen3.6:35b-mlx")
-OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+LLM_MODEL = os.environ.get("LLM_MODEL", "Qwen3.6-35B-A3B-MLX-8bit")
+OMLX_URL = os.environ.get("OMLX_HOST", "http://localhost:11434")
 
 
 def _fetch_all():
@@ -193,7 +193,7 @@ def build_ent_text(arts):
     return ""
 
 def get_llm(system_prompt, articles_text, timeout=300):
-     """Call Ollama /api/chat; strip thinking preamble."""
+     """Call Ollama /v1/chat/completions; strip thinking preamble."""
     pl = {"model": LLM_MODEL, "messages": [
               {"role":"system","content":system_prompt},
               {"role":"user","content":articles_text[:8000]},
@@ -202,7 +202,7 @@ def get_llm(system_prompt, articles_text, timeout=300):
     rq = json.dumps(pl).encode('utf-8')
     try:
         req = urllib.request.Request(
-            f"{OLLAMA_URL}/api/chat", data=rq,
+            f"{OMLX_URL}/v1/chat/completions", data=rq,
             headers={"Content-Type":"application/json"})
         rs = urllib.request.urlopen(req, timeout=timeout)
         rt = json.loads(rs.read())

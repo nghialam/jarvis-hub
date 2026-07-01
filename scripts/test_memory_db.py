@@ -105,12 +105,12 @@ def test_dedup():
         db = MemoryDB(db_path)
 
         # Add first entry
-        rowid1 = db.add_memory("fact", "ollama", "Parallel calls cause timeouts on 37GB models")
+        rowid1 = db.add_memory("fact", "omlx", "Parallel calls cause timeouts on 37GB models")
         time.sleep(0.05)   # Ensure different timestamp
 
         # Add similar entry (should update original with high bigram overlap)
         similar_content = "Parallel API calls will cause timeouts when running 37GB models"
-        rowid2 = db.add_memory("fact", "ollama", similar_content, no_dedup=False)
+        rowid2 = db.add_memory("fact", "omlx", similar_content, no_dedup=False)
 
         # These should be the same entry due to dedup
         assert rowid1 == rowid2, "Dedup failed: %s != %s" % (rowid1, rowid2)
@@ -144,10 +144,10 @@ def test_query_categories():
         db = MemoryDB(db_path)
 
         # Add memories in different categories
-        db.add_memory("fact", "ollama", "Local Ollama gateway runs on port 8000")
+        db.add_memory("fact", "omlx", "Local Ollama gateway runs on port 8000")
         db.add_memory(
             "lesson",
-            "ollama",
+            "omlx",
             "Sequential calls required for qwen3.6, parallel causes timeouts",
         )
         db.add_memory("decision", "rss", "International news fetched at 21:30 separately")
@@ -156,9 +156,9 @@ def test_query_categories():
          )
 
         # Query by category
-        ollama_results = db.query(category="ollama", limit=5)
+        ollama_results = db.query(category="omlx", limit=5)
         assert len(ollama_results) == 2, (
-            "Expected 2 'ollama' memories, got %d" % len(ollama_results)
+            "Expected 2 'omlx' memories, got %d" % len(ollama_results)
         )
         print("    [PASS] Category query: found %d ollama entries" % len(ollama_results))
 
@@ -173,7 +173,7 @@ def test_query_categories():
         print("    [PASS] Type query works correctly")
 
         # Combined filters
-        combined = db.query(category="ollama", type="lesson", limit=10)
+        combined = db.query(category="omlx", type="lesson", limit=10)
         assert len(combined) == 1
         print("    [PASS] Combined category+type filters work correctly")
 
@@ -337,7 +337,7 @@ def test_integration_flow():
 
         # Step 1: Add initial memories from migration script
         jarvis_db.add_memory(
-            "fact", "ollama", "qwen3.6:35b requires sequential API calls"
+            "fact", "omlx", "qwen3.6:35b requires sequential API calls"
         )
         jarvis_db.add_memory(
               "lesson",
@@ -349,7 +349,7 @@ def test_integration_flow():
         )
 
         # Step 2: Verify query works
-        ollama_entries = jarvis_db.query(category="ollama")
+        ollama_entries = jarvis_db.query(category="omlx")
         assert len(ollama_entries) >= 1, "Should find ollama category entries"
         print("    [PASS] Query by category from real data works")
 

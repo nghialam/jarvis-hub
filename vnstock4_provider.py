@@ -146,8 +146,11 @@ def fetch_daily_ohlcv(
         return None
 
     # Calculate change (latest candle vs previous)
-    latest_close = closes_list[-1]
-    prev_close = closes_list[-2] if len(closes_list) > 1 else 0
+    # vnstock returns prices in "nghìn đồng" (thousands of VND) — multiply by 1000
+    VND_MULTIPLIER = 1000
+
+    latest_close = closes_list[-1] * VND_MULTIPLIER
+    prev_close = closes_list[-2] * VND_MULTIPLIER if len(closes_list) > 1 else 0
 
     if prev_close and prev_close != 0:
         change = round(latest_close - prev_close, 2)
@@ -156,12 +159,12 @@ def fetch_daily_ohlcv(
         change = 0.0
         change_pct = 0.0
 
-    latest_open = opens_list[-1] if opens_list else None
-    latest_high = highs_list[-1] if highs_list else None
-    latest_low = lows_list[-1] if lows_list else None
+    latest_open = opens_list[-1] * VND_MULTIPLIER if opens_list else None
+    latest_high = highs_list[-1] * VND_MULTIPLIER if highs_list else None
+    latest_low = lows_list[-1] * VND_MULTIPLIER if lows_list else None
     latest_volume = volumes_list[-1] if volumes_list else 0
 
-    # Extract metadata from vnstock equity object
+     # Extract metadata from vnstock equity object
     try:
         if hasattr(eq, 'info') and eq.info:
             meta_info = eq.info
@@ -176,24 +179,24 @@ def fetch_daily_ohlcv(
         pe_ratio = None
 
     result = {
-        "symbol": symbol,
-        "name": name,
-        "price": latest_close if latest_close > 0 else None,
-        "open": round(latest_open, 2) if latest_open is not None and latest_open > 0 else None,
-        "high": round(latest_high, 2) if latest_high is not None and latest_high > 0 else None,
-        "low": round(latest_low, 2) if latest_low is not None and latest_low > 0 else None,
-        "volume": latest_volume,
-        "change": change,
-        "change_pct": change_pct,
-        "history_source": "vnstock4",
-        "source_used": source,
-        "type": "VN",
-        "currency": "VND",
-        "historical_closes": [c for c in closes_list if c > 0],
-        "historical_timestamps": dates if dates else [],
-        "historical_opens": [o for o in opens_list if o is not None and o > 0],
-        "historical_highs": [h for h in highs_list if h is not None and h > 0],
-        "historical_lows": [l for l in lows_list if l is not None and l > 0],
+         "symbol": symbol,
+         "name": name,
+         "price": latest_close if latest_close > 0 else None,
+         "open": round(latest_open, 2) if latest_open is not None and latest_open > 0 else None,
+         "high": round(latest_high, 2) if latest_high is not None and latest_high > 0 else None,
+         "low": round(latest_low, 2) if latest_low is not None and latest_low > 0 else None,
+         "volume": latest_volume,
+         "change": change,
+         "change_pct": change_pct,
+         "history_source": "vnstock4",
+         "source_used": source,
+         "type": "VN",
+         "currency": "VND",
+         "historical_closes": [round(c * VND_MULTIPLIER, 2) for c in closes_list if c > 0],
+         "historical_timestamps": dates if dates else [],
+         "historical_opens": [round(o * VND_MULTIPLIER, 2) for o in opens_list if o is not None and o > 0],
+         "historical_highs": [round(h * VND_MULTIPLIER, 2) for h in highs_list if h is not None and h > 0],
+         "historical_lows": [round(l * VND_MULTIPLIER, 2) for l in lows_list if l is not None and l > 0],
         "historical_volumes": volumes_list,
     }
 

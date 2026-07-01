@@ -1,0 +1,3 @@
+# Trading Bot Dependencies
+# Flask is optional - can use http.server if not installed
+flask

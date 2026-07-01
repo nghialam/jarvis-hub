@@ -112,12 +112,13 @@ def heuristic_sentiment(title: str, summary: str) -> Tuple[str, int, int]:
 
 
 def llm_sentiment(title: str, summary: str) -> tuple:
-    """Layer 2: Ollama LLM-powered sentiment analysis per article.
-    Returns (sentiment_label, brief_reasoning) or None if Ollama unavailable."""
+    """Layer 2: OMLX LLM-powered sentiment analysis per article.
+    Returns (sentiment_label, brief_reasoning) or None if OMLX unavailable."""
     try:
+        import core.omlx_client as omlx
         config = _get_config()
-        ollama_url = config.get("ollama", {}).get("url", "http://localhost:11434")
-        model = config.get("ollama", {}).get("model", "qwen3.6:latest")
+        if not config or "omlx" not in config:
+            return None
 
         prompt = (
             "Ban la tro gi phan tich thi truong tai chinh Viet Nam. "
@@ -130,45 +131,14 @@ def llm_sentiment(title: str, summary: str) -> tuple:
             "Chi tra ve JSON, khong them giai thich gi khac."
         )
 
+        # Use OMLX client with JSON parsing
+        result = omlx.omlx_parse_json(prompt, timeout=30)
+        if result is None:
+            return None
 
-        def _call_ollama():
-            try:
-                resp = requests.post(
-                    ollama_url + "/api/chat",
-                    json={
-                        "model": model,
-                        "messages": [
-                            {"role": "system", "content": prompt},
-                            {"role": "user", "content": f"Title: {title}\nContent: {summary[:500]}"}
-                        ],
-                        "stream": False,
-                        "num_predict": 4096,
-                    },
-                    timeout=30,
-                )
-                if resp.status_code != 200:
-                    print(f"[WARN] Ollama returned {resp.status_code} for {title[:50]}")
-                    return None
-
-                data = resp.json()
-                result_text = data.get("message", {}).get("content", "").strip()
-
-                # Extract JSON from markdown code blocks if present
-                json_match = re.search(r"```(?:json)?\\s*(.+?)\\s*```", result_text, re.DOTALL)
-                if json_match:
-                    result_text = json_match.group(1)
-
-                parsed = json.loads(result_text)
-                sentiment = parsed.get("sentiment", "trung_lap")
-                reasoning = parsed.get("reason", "")
-                return (sentiment, reasoning)
-            except Exception as e:
-                print(f"[WARN] Ollama call failed for {title[:50]}: {e}", file=sys.stderr)
-                return None
-
-        # Single get_or_call - lambda delegates to _call_ollama on MISS
-        result = llm_cache.get_or_call(prompt, _call_ollama)
-        return result
+        sentiment = result.get("sentiment", "trung_lap")
+        reasoning = result.get("reason", "")
+        return (sentiment, reasoning)
 
     except Exception as e:
         print(f"[WARN] LLM sentiment failed for {title[:50]}: {e}", file=sys.stderr)
