@@ -154,146 +154,18 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_alerts_symbol ON trading_alerts(symbol);
             CREATE INDEX IF NOT EXISTS idx_alerts_timestamp ON trading_alerts(timestamp DESC);
             CREATE INDEX IF NOT EXISTS idx_alerts_status   ON trading_alerts(status);
-
-            -- Hub 2.0 tables
-
-            -- Market overview (pre-computed for fast dashboard load)
-            CREATE TABLE IF NOT EXISTS market_overview (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                date DATE NOT NULL,
-                symbol VARCHAR(20) NOT NULL,
-                name TEXT,
-                asset_type VARCHAR(20),
-                price REAL,
-                change_pct REAL,
-                market_cap REAL,
-                volume REAL,
-                week_change REAL,
-                month_change REAL,
-                quarter_change REAL,
-                chart_data TEXT,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            CREATE TABLE IF NOT EXISTS market_intelligence (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_date       TEXT    NOT NULL,
+                run_period     TEXT    NOT NULL DEFAULT 'daily',  -- daily / weekly
+                articles_json  TEXT    NOT NULL,                 -- JSON array of processed articles
+                market_brief   TEXT,                             -- synthesized market brief content
+                status         TEXT  NOT NULL DEFAULT 'Notification Ready',
+                created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
-            -- News with enhanced metadata
-            CREATE TABLE IF NOT EXISTS news_enhanced (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                article_id INTEGER,
-                title TEXT NOT NULL,
-                summary TEXT,
-                content TEXT,
-                url TEXT NOT NULL,
-                source TEXT,
-                published_at TIMESTAMP,
-                fetched_at TIMESTAMP,
-                category TEXT,
-                sentiment TEXT,
-                sentiment_score REAL,
-                importance REAL,
-                affected_symbols TEXT,
-                is_trending BOOLEAN DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-
-            -- Brokerage reports
-            CREATE TABLE IF NOT EXISTS brokerage_reports (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                broker VARCHAR(10) NOT NULL,
-                title TEXT NOT NULL,
-                summary TEXT,
-                full_text TEXT,
-                pdf_url TEXT,
-                report_date DATE NOT NULL,
-                crawled_at TIMESTAMP,
-                rating INTEGER,
-                target_index TEXT,
-                sector_focus TEXT,
-                source_url TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-
-            -- Portfolio watchlist
-            CREATE TABLE IF NOT EXISTS portfolio_watchlist (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                symbol VARCHAR(20) NOT NULL,
-                name TEXT,
-                sector TEXT,
-                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_checked TIMESTAMP,
-                UNIQUE(symbol)
-            );
-
-            -- AI Intelligence: run_chains (LLM pipeline runs)
-            CREATE TABLE IF NOT EXISTS run_chains (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                run_id TEXT UNIQUE NOT NULL,
-                pipeline_date TEXT NOT NULL,
-                llm_chain_1_summary TEXT,
-                llm_chain_3_summary TEXT,
-                total_articles INTEGER DEFAULT 0,
-                total_sources INTEGER DEFAULT 0,
-                status TEXT DEFAULT 'complete',
-                error_log TEXT,
-                chain_started_at TIMESTAMP,
-                chain_completed_at TIMESTAMP,
-                duration_sec REAL
-            );
-
-            -- AI Intelligence: articles (per-crawl articles)
-            CREATE TABLE IF NOT EXISTS articles (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                run_id TEXT NOT NULL,
-                published_date TEXT,
-                title TEXT NOT NULL,
-                summary_raw TEXT,
-                category TEXT DEFAULT 'general',
-                sentiment TEXT DEFAULT 'TRUNG_LAP',
-                sentiment_score REAL DEFAULT 0,
-                url TEXT,
-                has_image INTEGER DEFAULT 0,
-                order_in_run INTEGER,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-
-            -- AI Intelligence: articles images
-            CREATE TABLE IF NOT EXISTS articles_images (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                article_id INTEGER REFERENCES articles(id),
-                image_url TEXT NOT NULL,
-                caption TEXT DEFAULT '',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-
-            -- AI Intelligence: recommendations
-            CREATE TABLE IF NOT EXISTS recommendations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                run_id TEXT NOT NULL,
-                article_id INTEGER REFERENCES articles(id),
-                type TEXT NOT NULL,
-                source_topic TEXT DEFAULT '',
-                heading TEXT NOT NULL,
-                detail_markdown TEXT,
-                confidence_hint TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-
-            -- Indexes for performance
-            CREATE INDEX IF NOT EXISTS idx_market_overview_date ON market_overview(date DESC);
-            CREATE INDEX IF NOT EXISTS idx_market_overview_symbol ON market_overview(symbol);
-            CREATE INDEX IF NOT EXISTS idx_news_enhanced_category ON news_enhanced(category);
-            CREATE INDEX IF NOT EXISTS idx_news_enhanced_importance ON news_enhanced(importance DESC);
-            CREATE INDEX IF NOT EXISTS idx_news_enhanced_published ON news_enhanced(published_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_brokerage_reports_broker ON brokerage_reports(broker);
-            CREATE INDEX IF NOT EXISTS idx_brokerage_reports_date ON brokerage_reports(report_date DESC);
-            CREATE INDEX IF NOT EXISTS idx_brokerage_reports_broker_date ON brokerage_reports(broker, report_date DESC);
-            CREATE INDEX IF NOT EXISTS idx_articles_run_id ON articles(run_id);
-            CREATE INDEX IF NOT EXISTS idx_articles_sentiment ON articles(sentiment);
-            CREATE INDEX IF NOT EXISTS idx_articles_category ON articles(category);
-            CREATE INDEX IF NOT EXISTS idx_arts_img_article ON articles_images(article_id);
-            CREATE INDEX IF NOT EXISTS idx_recs_run_id ON recommendations(run_id);
-            CREATE INDEX IF NOT EXISTS idx_recs_type ON recommendations(type);
-            CREATE INDEX IF NOT EXISTS idx_runs_date ON run_chains(pipeline_date DESC);
-           """)
+            CREATE INDEX IF NOT EXISTS idx_mi_run_date ON market_intelligence(run_date DESC);
+            CREATE INDEX IF NOT EXISTS idx_mi_created_at ON market_intelligence(created_at DESC);           """)
         self._conn.commit()
         print("[DB] Initialized %s" % self.db_path)
 
@@ -584,247 +456,112 @@ class Database:
         ).fetchone()
         return r["cnt"] if r else 0
 
-    # ---- Hub 2.0: Market overview ------------------------------------------------
+    # ---- Market Intelligence Agent (v2.0) ------------------------------------
 
-    def save_market_overview(self, date, symbol, name, asset_type, price, change_pct,
-                             market_cap=None, volume=None, week_change=None,
-                             month_change=None, quarter_change=None, chart_data=None):
-        """Save market overview data for one symbol."""
+    def save_market_intelligence(self, run_date, run_period, articles_json, market_brief, status="Notification Ready"):
+        """Save a complete market intelligence run to DB."""
         with self._db_lock:
-            self._c().execute(
-                """INSERT INTO market_overview
-                   (date, symbol, name, asset_type, price, change_pct, market_cap, volume,
-                    week_change, month_change, quarter_change, chart_data)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (date, symbol, name, asset_type, price, change_pct,
-                 market_cap, volume, week_change, month_change, quarter_change,
-                 json.dumps(chart_data) if chart_data else None))
+            c = self._c()
+            try:
+                c.execute(
+                    """INSERT INTO market_intelligence
+                       (run_date, run_period, articles_json, market_brief, status)
+                      VALUES (?, ?, ?, ?, ?)
+                      ON CONFLICT(run_date, run_period) DO UPDATE SET
+                        articles_json=excluded.articles_json,
+                        market_brief=excluded.market_brief,
+                        status=excluded.status,
+                        created_at=CURRENT_TIMESTAMP""",
+                    (run_date, run_period, articles_json, market_brief, status))
+                self._conn.commit()
+                return c.lastrowid
+            except sqlite3.Error:
+                return 0
+
+    def get_latest_market_intelligence(self):
+        """Get the most recent market intelligence run."""
+        r = self._c().execute(
+            "SELECT * FROM market_intelligence ORDER BY created_at DESC LIMIT 1"
+        ).fetchone()
+        if r:
+            d = dict(r)
+            try:
+                d["articles"] = json.loads(d.get("articles_json", "[]"))
+            except Exception:
+                d["articles"] = []
+            return d
+        return None
+
+    def get_market_intelligence_history(self, limit=10, period=None):
+        """List past runs with optional period filter."""
+        if period:
+            rows = self._c().execute(
+                "SELECT id, run_date, run_period, status, created_at, articles_json, market_brief "
+                "FROM market_intelligence WHERE run_period=? ORDER BY created_at DESC LIMIT ?",
+                (period, limit)
+            ).fetchall()
+        else:
+            rows = self._c().execute(
+                "SELECT id, run_date, run_period, status, created_at, articles_json, market_brief "
+                "FROM market_intelligence ORDER BY created_at DESC LIMIT ?",
+                (limit,)
+            ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            try:
+                articles = json.loads(d.get("articles_json", "[]"))
+                sentiments = [a.get("sentiment", "Neutral") for a in articles if isinstance(a, dict)]
+                bull = sentiments.count("Bullish")
+                bear = sentiments.count("Bearish")
+                neu = sentiments.count("Neutral")
+                d["article_count"] = len(articles)
+                d["sentiment_summary"] = {"bullish": bull, "bearish": bear, "neutral": neu}
+            except Exception:
+                d["article_count"] = 0
+                d["sentiment_summary"] = {"bullish": 0, "bearish": 0, "neutral": 0}
+            result.append(d)
+        return result
+
+    def get_market_intelligence_by_id(self, run_id):
+        """Get specific run by ID."""
+        r = self._c().execute(
+            "SELECT * FROM market_intelligence WHERE id=?", (run_id,)
+        ).fetchone()
+        if r:
+            d = dict(r)
+            try:
+                d["articles"] = json.loads(d.get("articles_json", "[]"))
+            except Exception:
+                d["articles"] = []
+            return d
+        return None
+
+    def delete_market_intelligence(self, run_id):
+        """Delete a specific run."""
+        with self._db_lock:
+            c = self._c()
+            c.execute("DELETE FROM market_intelligence WHERE id=?", (run_id,))
             self._conn.commit()
+            return c.rowcount > 0
 
-    def get_market_overview(self, date=None, symbol=None):
-        """Get market overview entries."""
-        q = "SELECT * FROM market_overview WHERE 1=1"
-        params = []
-        if date:
-            q += " AND date=?"
-            params.append(date)
-        if symbol:
-            q += " AND symbol=?"
-            params.append(symbol)
-        q += " ORDER BY updated_at DESC"
-        return [dict(r) for r in self._c().execute(q, params).fetchall()]
-
-    def get_latest_overview(self):
-        """Get the latest market overview (one entry per symbol)."""
+    def get_sentiment_distribution(self):
+        """Get Bullish/Bearish/Neutral counts across all articles."""
         rows = self._c().execute(
-            """SELECT mo.* FROM market_overview mo
-               INNER JOIN (
-                   SELECT symbol, MAX(updated_at) as max_date FROM market_overview GROUP BY symbol
-               ) latest ON mo.symbol = latest.symbol AND mo.updated_at = latest.max_date
-               ORDER BY mo.updated_at DESC""").fetchall()
-        return [dict(r) for r in rows]
-
-    # ---- Hub 2.0: News enhanced ------------------------------------------------
-
-    def save_news_enhanced(self, title, summary, content, url, source,
-                           published_at, category, sentiment, sentiment_score,
-                           importance=0, affected_symbols=None, article_id=None):
-        """Save an enhanced news entry."""
-        with self._db_lock:
-            self._c().execute(
-                """INSERT INTO news_enhanced
-                   (article_id, title, summary, content, url, source, published_at,
-                    category, sentiment, sentiment_score, importance, affected_symbols)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (article_id, title, summary, content, url, source, published_at,
-                 category, sentiment, sentiment_score, importance,
-                 json.dumps(affected_symbols) if affected_symbols else None))
-            self._conn.commit()
-
-    def get_news_enhanced(self, category=None, sentiment=None, limit=50, timeframe_days=7):
-        """Get enhanced news entries with optional filters."""
-        q = """SELECT * FROM news_enhanced WHERE 1=1"""
-        params = []
-        if category and category != "all":
-            q += " AND category=?"
-            params.append(category)
-        if sentiment and sentiment != "all":
-            q += " AND sentiment=?"
-            params.append(sentiment)
-        q += """ AND published_at >= datetime('now', '-{} days')""".format(timeframe_days)
-        q += """ ORDER BY importance DESC, published_at DESC LIMIT ?"""
-        params.append(limit)
-        return [dict(r) for r in self._c().execute(q, params).fetchall()]
-
-    def get_trending_news(self, limit=10):
-        """Get trending (high importance) news."""
-        return [dict(r) for r in self._c().execute(
-            """SELECT * FROM news_enhanced
-               WHERE importance >= 7 AND published_at >= datetime('now', '-7 days')
-               ORDER BY importance DESC LIMIT ?""", (limit,)).fetchall()]
-
-    # ---- Hub 2.0: Brokerage reports ------------------------------------------------
-
-    def save_brokerage_report(self, broker, title, summary, full_text, pdf_url,
-                              report_date, rating=None, target_index=None,
-                              sector_focus=None, source_url=None):
-        """Save a brokerage research report."""
-        with self._db_lock:
-            self._c().execute(
-                """INSERT INTO brokerage_reports
-                   (broker, title, summary, full_text, pdf_url, report_date, rating,
-                    target_index, sector_focus, source_url)
-                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                (broker, title, summary, full_text, pdf_url, report_date,
-                 rating, target_index, sector_focus, source_url))
-            self._conn.commit()
-
-    def get_brokerage_reports(self, broker=None, period="1m", limit=20):
-        """Get brokerage reports with optional broker filter."""
-        q = """SELECT * FROM brokerage_reports WHERE 1=1"""
-        params = []
-        if broker and broker != "all":
-            q += " AND broker=?"
-            params.append(broker)
-        q += """ AND report_date >= datetime('now', '-{}')""".format(period)
-        q += """ ORDER BY report_date DESC LIMIT ?"""
-        params.append(limit)
-        return [dict(r) for r in self._c().execute(q, params).fetchall()]
-
-    def get_brokerage_stats(self):
-        """Get report stats per broker."""
-        rows = self._c().execute(
-            """SELECT broker, COUNT(*) as count, MAX(report_date) as latest
-               FROM brokerage_reports GROUP BY broker ORDER BY count DESC""").fetchall()
-        return [dict(r) for r in rows]
-
-    # ---- Hub 2.0: Portfolio watchlist ------------------------------------------------
-
-    def add_portfolio_watchlist(self, symbol, name=None, sector=None):
-        """Add or update a symbol in portfolio watchlist."""
-        with self._db_lock:
-            self._c().execute(
-                """INSERT INTO portfolio_watchlist (symbol, name, sector)
-                   VALUES (?,?,?)
-                   ON CONFLICT(symbol) DO UPDATE SET name=excluded.name, sector=excluded.sector, last_checked=CURRENT_TIMESTAMP""",
-                (symbol.upper(), name or "", sector or ""))
-            self._conn.commit()
-
-    def get_portfolio_watchlist(self):
-        """Get portfolio watchlist."""
-        return [dict(r) for r in self._c().execute(
-            "SELECT * FROM portfolio_watchlist ORDER BY added_at DESC").fetchall()]
-
-    def remove_portfolio_watchlist(self, symbol):
-        """Remove from portfolio watchlist."""
-        with self._db_lock:
-            self._c().execute("DELETE FROM portfolio_watchlist WHERE UPPER(symbol)=UPPER(?)", (symbol,))
-            self._conn.commit()
-
-    # ---- AI Intelligence: run_chains ------------------------------------------------
-
-    def save_run_chain(self, run_id, pipeline_date, llm_chain_1_summary=None,
-                       llm_chain_3_summary=None, total_articles=0, total_sources=0,
-                       status="complete", error_log=None, duration_sec=None):
-        """Save LLM pipeline run metadata."""
-        with self._db_lock:
-            self._c().execute(
-                """INSERT OR REPLACE INTO run_chains
-                   (run_id, pipeline_date, llm_chain_1_summary, llm_chain_3_summary,
-                    total_articles, total_sources, status, error_log, duration_sec)
-                   VALUES (?,?,?,?,?,?,?,?,?)""",
-                (run_id, pipeline_date, llm_chain_1_summary, llm_chain_3_summary,
-                 total_articles, total_sources, status, error_log, duration_sec))
-            self._conn.commit()
-
-    def get_run_chains(self, limit=20):
-        """Get recent run chains."""
-        return [dict(r) for r in self._c().execute(
-            "SELECT * FROM run_chains ORDER BY pipeline_date DESC LIMIT ?", (limit,)).fetchall()]
-
-    def get_run_chain(self, run_id):
-        """Get a specific run chain."""
-        r = self._c().execute("SELECT * FROM run_chains WHERE run_id=?", (run_id,)).fetchone()
-        return dict(r) if r else None
-
-    # ---- AI Intelligence: articles ------------------------------------------------
-
-    def save_articles(self, run_id, articles):
-        """Bulk save articles from a crawl run."""
-        with self._db_lock:
-            for i, art in enumerate(articles):
-                self._c().execute(
-                    """INSERT INTO articles
-                       (run_id, published_date, title, summary_raw, category,
-                        sentiment, sentiment_score, url, has_image, order_in_run)
-                       VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                    (run_id, art.get("published_date"), art.get("title", ""),
-                     art.get("summary_raw", ""), art.get("category", "general"),
-                     art.get("sentiment", "TRUNG_LAP"), art.get("sentiment_score", 0),
-                     art.get("url"), 1 if art.get("has_image") else 0, i))
-                art_id = self._c().lastrowid
-                if art.get("image_urls"):
-                    for img_url in art["image_urls"]:
-                        self._c().execute(
-                            "INSERT INTO articles_images (article_id, image_url) VALUES (?,?)",
-                            (art_id, img_url))
-            self._conn.commit()
-
-    def get_articles(self, run_id=None, category=None, sentiment=None, limit=50):
-        """Get articles with optional filters."""
-        q = "SELECT * FROM articles WHERE 1=1"
-        params = []
-        if run_id:
-            q += " AND run_id=?"
-            params.append(run_id)
-        if category and category != "all":
-            q += " AND category=?"
-            params.append(category)
-        if sentiment and sentiment != "all":
-            q += " AND sentiment=?"
-            params.append(sentiment)
-        q += " ORDER BY order_in_run ASC LIMIT ?"
-        params.append(limit)
-        return [dict(r) for r in self._c().execute(q, params).fetchall()]
-
-    # ---- AI Intelligence: recommendations ------------------------------------------------
-
-    def save_recommendations(self, run_id, recs):
-        """Bulk save recommendations from LLM output."""
-        with self._db_lock:
-            for rec in recs:
-                self._c().execute(
-                    """INSERT INTO recommendations
-                       (run_id, article_id, type, source_topic, heading,
-                        detail_markdown, confidence_hint)
-                       VALUES (?,?,?,?,?,?,?)""",
-                    (run_id, rec.get("article_id"), rec.get("type", ""),
-                     rec.get("source_topic", ""), rec.get("heading", ""),
-                     rec.get("detail_markdown", ""), rec.get("confidence_hint")))
-            self._conn.commit()
-
-    def get_recommendations(self, run_id=None, rec_type=None, limit=50):
-        """Get recommendations with optional filters."""
-        q = "SELECT * FROM recommendations WHERE 1=1"
-        params = []
-        if run_id:
-            q += " AND run_id=?"
-            params.append(run_id)
-        if rec_type and rec_type != "all":
-            q += " AND type=?"
-            params.append(rec_type)
-        q += " ORDER BY created_at DESC LIMIT ?"
-        params.append(limit)
-        return [dict(r) for r in self._c().execute(q, params).fetchall()]
-
-    # ---- Hub 2.0: News importance scoring ------------------------------------------------
-
-    def update_news_importance(self, article_id, importance, reason):
-        """Update importance score for a news article."""
-        with self._db_lock:
-            self._c().execute(
-                """UPDATE news_enhanced
-                   SET importance=?, importance_reason=?
-                   WHERE id=?""",
-                (importance, reason, article_id))
-            self._conn.commit()
+            "SELECT articles_json FROM market_intelligence"
+        ).fetchall()
+        totals = {"Bullish": 0, "Bearish": 0, "Neutral": 0}
+        total_articles = 0
+        for r in rows:
+            try:
+                articles = json.loads(r["articles_json"])
+                for a in articles:
+                    if isinstance(a, dict) and "sentiment" in a:
+                        s = a["sentiment"]
+                        if s in totals:
+                            totals[s] += 1
+                        total_articles += 1
+            except Exception:
+                pass
+        totals["total"] = total_articles
+        return totals

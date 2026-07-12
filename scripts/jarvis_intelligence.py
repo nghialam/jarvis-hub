@@ -159,7 +159,7 @@ def fetch_rss(source):
 def get_llm_analysis(system_prompt, articles_text, timeout=300):
     """Call Ollama /v1/chat/completions."""
     ollama_url = "http://localhost:11434"
-    model = "Qwen3.6-35B-A3B-MLX-8bit"
+    model = "qwen3.6:35b-a3b-mxfp8"
     payload = {
         "model": model,
         "messages": [
@@ -183,7 +183,7 @@ def get_llm_analysis(system_prompt, articles_text, timeout=300):
     except Exception as e:
         print("[LLM ERROR] {}: {}".format(type(e).__name__, e), file=sys.stderr)
         if "8000" in str(e):
-            return "OMLX not running - start it with: omlx"
+            return "OLLAMA not running - start it with: ollama"
         return "[LLM Error: {}]".format(type(e).__name__)
 
 

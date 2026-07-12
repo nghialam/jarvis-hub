@@ -117,7 +117,7 @@ VIET_NORM = {
 
 
 def normalize_vi(text):
-     """Normalize Vietnamese diacritics to ASCII for keyword matching."""
+    """Normalize Vietnamese diacritics to ASCII for keyword matching."""
     return "".join(VIET_NORM.get(ch, ch) for ch in text.lower())
 
 

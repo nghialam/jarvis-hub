@@ -9,8 +9,8 @@ Usage:
     from memory_db import MemoryDB
 
     db = MemoryDB("/path/to/jarvis.db")
-    db.add_memory("lesson", "omlx", "qwen3.6 needs sequential API calls, not parallel.")
-    results = db.query(category="omlx")
+    db.add_memory("lesson", "ollama", "qwen3.6 needs sequential API calls, not parallel.")
+    results = db.query(category="ollama")
     db.compact()  # runs automatically when entries get stale
 """
 

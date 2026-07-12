@@ -10,9 +10,12 @@ Delivers 3 messages to chat -1003801745265 at ~20:00 weekdays:
 import json, os, re, sys, time, urllib.request
 from datetime import datetime
 
+# Use ollama_client for LLM calls
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from core.ollama_client import ollama_call as _ollama_call
+
 CHAT_ID = "-1003801745265"
-OMLX_HOST = "http://localhost:11434"
-MODEL_NAME  = "Qwen3.6-35B-A3B-MLX-8bit"
+MODEL_NAME   = "qwen3.6:35b-a3b-mxfp8"
 
 
 def get_token():
@@ -217,8 +220,8 @@ def build_text(articles, ent=False):
 
 # ===== LLM helpers ===== #
 
-def omlx_call(prompt, text_blob, timeout=90):
-    """Call OMLX /v1/chat/completions non-streaming. Return cleaned analysis."""
+def ollama_call(prompt, text_blob, timeout=90):
+    """Call OLLAMA /v1/chat/completions non-streaming. Return cleaned analysis."""
     payload = {
         "model": MODEL_NAME,
         "messages": [
@@ -233,7 +236,7 @@ def omlx_call(prompt, text_blob, timeout=90):
     }
     data = json.dumps(payload).encode()
     try:
-        api_url = f"{OMLX_HOST}/v1/chat/completions"
+        api_url = f"{OLLAMA_HOST}/v1/chat/completions"
         req = urllib.request.Request(
             api_url, data=data,
             headers={"Content-Type": "application/json"})
@@ -259,9 +262,9 @@ def omlx_call(prompt, text_blob, timeout=90):
                 else "[No useful result]")
 
     except Exception as e:
-        print(f"[OMLX err] {e}")
+        print(f"[OLLAMA err] {e}")
         if "8000" in str(e):
-            return "OMLX down"
+            return "Ollama down"
         return "[Error]"
 
 
@@ -270,11 +273,11 @@ def llm_seq(prompt, text_blob, timeout=90):
     result = ""
     for attempt in range(3):
         try:
-            result = omlx_call(prompt, text_blob,
+            result = ollama_call(prompt, text_blob,
                                  min(timeout, 80))
             ok = (result and len(result) > 50
                   and "Error" not in result[:20]
-                  and "OMLX down" not in result
+                  and "Ollama down" not in result
                   and "down" not in result.lower()[:10])
             if ok:
                 break
@@ -365,7 +368,7 @@ def run():
     # Ollama health check
     try:
         chk     = urllib.request.urlopen(
-            f"{OMLX_HOST}/v1/models", timeout=5)
+            f"{OLLAMA_HOST}/v1/models", timeout=5)
         info    = json.loads(chk.read())
         models  = [m.get("name", "?") for m
                     in info.get("models", [])]

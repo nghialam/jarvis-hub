@@ -15,8 +15,12 @@ import json
 import os
 import re
 import sys
+import time
+import logging
 from datetime import datetime, timedelta
 from html import unescape as html_unescape
+
+log = logging.getLogger(__name__)
 
 import numpy as np
 import requests
@@ -241,25 +245,49 @@ def _parse_yahoo_csv(csv_text, symbol):
     }
 
 
-def _fetch_yahoo(symbol, timeout_sec=8):
-    """Fetch chart data from Yahoo Finance. Returns dict or None."""
-    url = f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=1mo&interval=1d'
-    try:
-        r = requests.get(url, headers=_YAHOO_HEADERS, timeout=timeout_sec)
-        if r.status_code == 200:
-            return _parse_yahoo_chart(r.json(), symbol)
-    except Exception:
-        pass
+def _fetch_yahoo(symbol, timeout_sec=8, max_retries=3):
+    """Fetch chart data from Yahoo Finance with retry + exponential backoff.
 
-    # Fallback to CSV download endpoint
+    Tries V8 chart endpoint first, then falls back to CSV download.
+    Retries up to max_retries times on transient failures (connection errors,
+    5xx responses). Returns dict or string (CSV raw) or None.
+    """
+    url = f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=1mo&interval=1d'
+    
+    for attempt in range(max_retries):
+        try:
+            r = requests.get(url, headers=_YAHOO_HEADERS, timeout=timeout_sec)
+            if r.status_code == 200:
+                return _parse_yahoo_chart(r.json(), symbol)
+            elif r.status_code in (429, 500, 502, 503, 504):
+                log.warning('[YAHOO] %s returned %s on attempt %d/%d', symbol, r.status_code, attempt + 1, max_retries)
+            elif r.status_code in (403, 404):
+                log.warning('[YAHOO] %s returned non-retryable %s — giving up immediately', symbol, r.status_code)
+                return None  # No point retrying 403/404
+        except requests.exceptions.ConnectionError as e:
+            log.warning('[YAHOO] Connection error on %s attempt %d/%d: %s', symbol, attempt + 1, max_retries, e)
+        except requests.exceptions.Timeout as e:
+            log.warning('[YAHOO] Timeout on %s attempt %d/%d: %s', symbol, attempt + 1, max_retries, e)
+        except Exception as e:
+            log.warning('[YAHOO] Unexpected error on %s attempt %d/%d: %s', symbol, attempt + 1, max_retries, e)
+        
+        # Exponential backoff before next retry (skip after last attempt)
+        if attempt < max_retries - 1:
+            backoff = 1.5 ** (attempt + 1)
+            log.info('[YAHOO] Retrying %s in %.1fs (attempt %d/%d)', symbol, backoff, attempt + 2, max_retries)
+            time.sleep(backoff)
+    
+    # V8 exhausted; try CSV fallback once
     url2 = f'https://query1.finance.yahoo.com/v7/finance/download/{symbol}?period1=&period2=&interval=1d&events=history'
     try:
         r2 = requests.get(url2, headers=_YAHOO_HEADERS, timeout=timeout_sec + 2)
         if r2.status_code == 200:
-            return _parse_yahoo_csv(r2.text, symbol)
-    except Exception:
-        pass
-
+            # Return raw CSV text so caller can parse it with _parse_yahoo_csv
+            return r2.text
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, Exception):
+        pass  # Silently fail — V8 warnings already logged
+    
+    log.warning('[YAHOO] All %d attempts failed for symbol %s', max_retries, symbol)
     return None
 
 
@@ -480,8 +508,28 @@ class MarketService:
                 except Exception:
                     pass
 
+        # CafeF fallback for Vietnamese stocks when both vnstock4 and Yahoo fail
+        if not price_data and is_vn_stock:
+            try:
+                from core import cafe_f as _cafef
+                _cafe_data = _cafef.fetch_stock_data(normalized)
+                if _cafe_data and _cafe_data.get('price'):
+                    # Map CafeF output to our expected schema
+                    price_data = {
+                        'symbol': normalized,
+                        'name': f'{normalized} (CafeF)',
+                        'price': float(_cafe_data['price']),
+                        'change_pct': _cafe_data.get('change_pct'),
+                        'currency': 'VND',
+                        'type': 'stock_vn',
+                        'history_source': 'cafef',
+                        'technical': {'error': 'Insufficient data for TA (CafeF fallback)'},
+                    }
+            except Exception as _e:
+                log.warning('[CAFEF] Fallback fetch failed for %s: %s', symbol, _e)
+
         if not price_data:
-            return {'error': f'Could not fetch data for {symbol} (tried vnstock4 + Yahoo)'}
+            return {'error': f'Could not fetch data for {symbol} (tried vnstock4 + Yahoo + CafeF)'}
 
         # Compute technical indicators
         ta = _calculate_technical_indicators(price_data)

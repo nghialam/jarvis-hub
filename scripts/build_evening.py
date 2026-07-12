@@ -18,8 +18,8 @@ PY = textwrap.dedent("""\
     from datetime import datetime
 
     CHAT_ID = "-1003801745265"
-    OMLX_HOST = "http://localhost:11434"
-    MODEL_NAME   = "Qwen3.6-35B-A3B-MLX-8bit"
+    OLLAMA_HOST = "http://localhost:11434"
+    MODEL_NAME   = "qwen3.6:35b-a3b-mxfp8"
 
     def get_token():
         for key in ["JARVIS_BOT_TOKEN", "TELEGRAM_BOT_TOKEN"]:
@@ -204,7 +204,7 @@ PY = textwrap.dedent("""\
         data = json.dumps(payload).encode()
         try:
             req = urllib.request.Request(
-                OMLX_HOST + "/v1/chat/completions", data=data,
+                OLLAMA_HOST + "/v1/chat/completions", data=data,
                 headers={"Content-Type": "application/json"})
             resp = urllib.request.urlopen(req, timeout=timeout)
             r    = json.loads(resp.read())
@@ -222,10 +222,10 @@ PY = textwrap.dedent("""\
                 full = ct.strip()
             return (full if len(full) > 50 or not full else "[No useful result]")
         except Exception as e:
-            print("[OMLX err] " + str(e))
+            print("[OLLAMA err] " + str(e))
             et = str(e)
             if "8000" in et:
-                return "OMLX down"
+                return "OLLAMA down"
             return "[Error]"
 
     def llm_seq(prompt, text, timeout=90):
@@ -303,7 +303,7 @@ PY = textwrap.dedent("""\
 
         # Check Ollama alive
         try:
-            c  = urllib.request.urlopen(OMLX_HOST + "/v1/models", timeout=5)
+            c  = urllib.request.urlopen(OLLAMA_HOST + "/v1/models", timeout=5)
             d  = json.loads(c.read())
             ms = [m.get("name", "?") for m in d.get("models", [])]
             print("  Ollama OK:", ", ".join(ms))

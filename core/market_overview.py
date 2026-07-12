@@ -3,125 +3,344 @@ market_overview.py -- Market data fetcher for Hub 2.0 Overview Dashboard.
 
 Fetches: VN-Index, global indices, crypto, gold, FX rates.
 Used by: /api/v1/overview/* endpoints.
+
+Fixes applied (2026-07-06):
+1. Retry with exponential backoff for Yahoo Finance 429 rate-limit errors
+2. Rate limiting delay between requests to avoid getting blocked
+3. Cache-Control header to reduce unnecessary requests
+4. Improved vnstock3 import resolution
 """
+
 import json
 import re
+import time
+import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import requests
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"}
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+    "Accept": "application/json",
+    "Cache-Control": "max-age=0",
+}
+
+# --- Rate limiting & retry helpers ---
+
+MAX_RETRY = 3
+RETRY_DELAY_BASE = 2  # seconds
 
 
-def _fetch_yahoo_price(symbol: str):
-    """Fetch a single symbol from Yahoo Finance chart API."""
+def _retry_request(url, params=None, timeout=15):
+    """Fetch with exponential backoff retry for 429/5xx errors."""
+    last_err = None
+    for attempt in range(MAX_RETRY):
+        try:
+            r = requests.get(url, params=params or {}, timeout=timeout, headers=HEADERS)
+
+            if r.status_code == 429:
+                wait = RETRY_DELAY_BASE * (2 ** attempt) + (attempt % 3)
+                print(f"[RETRY] Yahoo returned 429 for {url}, waiting {wait}s (attempt {attempt+1}/{MAX_RETRY})")
+                time.sleep(wait)
+                continue
+
+            if r.status_code >= 500:
+                wait = RETRY_DELAY_BASE * (2 ** attempt)
+                print(f"[RETRY] Yahoo returned {r.status_code} for {url}, waiting {wait}s")
+                time.sleep(wait)
+                continue
+
+            return r
+
+        except requests.exceptions.Timeout as e:
+            last_err = e
+            wait = RETRY_DELAY_BASE * (2 ** attempt)
+            print(f"[RETRY] Timeout for {url}, waiting {wait}s")
+            time.sleep(wait)
+        except requests.exceptions.ConnectionError as e:
+            last_err = e
+            print(f"[RETRY] Connection error for {url}: {e}")
+            if attempt < MAX_RETRY - 1:
+                time.sleep(2 * (attempt + 1))
+
+    print(f"[ERROR] All retries failed for {url}: {last_err}", file=sys.stderr)
+    return None
+
+
+# --- Cache to avoid re-fetching during same session ---
+_SESSION_CACHE = {}
+_SESSION_CACHE_TS = {}
+SESSION_TTL = 300  # 5 minutes cache in session
+
+
+def _cached_fetch(key, fetcher_func):
+    """Simple time-based cache: returns cached result if TTL not exceeded."""
+    now = time.time()
+    if key in _SESSION_CACHE and (now - _SESSION_CACHE_TS.get(key, 0)) < SESSION_TTL:
+        return _SESSION_CACHE[key]
+    result = fetcher_func()
+    _SESSION_CACHE[key] = result
+    _SESSION_CACHE_TS[key] = now
+    return result
+
+
+# --- Yahoo Finance helpers ---
+
+def _parse_yahoo_response(r):
+    """Parse a Yahoo Finance response, returning market data dict or None."""
+    if r is None:
+        return None
     try:
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}.VN"
-        r = requests.get(url, timeout=10, headers=HEADERS)
         data = r.json()
-        result_data = data.get("chart", {}).get("result")
-        if not result_data:
+    except (ValueError, TypeError):
+        return None
+
+    result_list = data.get("chart", {}).get("result") if isinstance(data, dict) else None
+    if not result_list or len(result_list) == 0:
+        return None
+
+    meta = result_list[0].get("meta", {})
+    price = meta.get("regularMarketPrice")
+    prev_close = meta.get("previousClose")
+
+    if price is None or prev_close is None:
+        print(f"[WARN] Yahoo returned no price data for symbol. Response keys: {list(data.keys())}", file=sys.stderr)
+        return None
+
+    try:
+        p = float(price)
+        pc = float(prev_close)
+    except (ValueError, TypeError):
+        return None
+
+    if pc <= 0:
+        return None
+
+    return {
+        "price": round(p, 2),
+        "prev_close": round(pc, 2),
+        "change": round(p - pc, 2),
+        "change_pct": round((p - pc) / pc * 100, 2),
+    }
+
+
+def _fetch_yahoo_price(symbol: str, is_vn: bool = True):
+    """Fetch a single symbol from Yahoo Finance chart API with retry.
+
+    VN stocks need .VN suffix appended (unless already has it).
+    Non-VN symbols go directly to Yahoo.
+    """
+    try:
+        if is_vn and not symbol.endswith(".VN"):
+            sym = f"{symbol}.VN"
+        else:
+            sym = symbol
+
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}"
+        r = _retry_request(url, timeout=15)
+        return _parse_yahoo_response(r)
+
+    except Exception as e:
+        print(f"[ERROR] Yahoo fetch failed for {symbol}: {e}", file=sys.stderr)
+        return None
+
+
+def _fetch_period_data(symbol: str, interval: str, range_str: str):
+    """Fetch period data (1w/1m/1q) with retry."""
+    try:
+        sym = symbol if symbol.endswith(".VN") else f"{symbol}.VN"
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}"
+        r = _retry_request(url, params={"interval": interval, "range": range_str}, timeout=15)
+        if r is None:
+            return {}
+
+        data = r.json()
+        result_list = data.get("chart", {}).get("result", [{}])
+        tmeta = result_list[0].get("meta", {}) if result_list else {}
+        open_price = tmeta.get("chartPreviousClose") or tmeta.get("open")
+
+        return {"open": open_price} if open_price else {}
+    except Exception:
+        return {}
+
+
+# --- VN Stock fetchers ---
+
+def _fetch_vn_stock_via_vnstock3(symbol: str):
+    """Fetch VN stock price using vnstock3 (new generation)."""
+    try:
+        venv_path = Path("/Users/nghialam/.hermes/hermes-agent/venv/lib/python3.11/site-packages")
+        if venv_path.exists():
+            sys.path.insert(0, str(venv_path))
+
+        # vnstock3 uses different import path (migrated from vnstock.api)
+        try:
+            from vnstock.api.quote import Quote as VsQuote
+        except ImportError:
+            # Try alternative import paths
+            try:
+                from vnstock import Quote as VsQuote
+            except ImportError:
+                return None
+
+        q = VsQuote(symbol=symbol, show_log=False)
+        df = q.history(symbol=symbol, start="2026-04-01", end="2026-07-01")
+
+        if not df.empty:
+            latest = df.iloc[-1]
+            # vnstock returns prices in "nghìn đồng" — multiply by 1000 for actual VND
+            current_close = float(latest["close"]) * 1000
+            prev_close = (float(df.iloc[-2]["close"]) * 1000) if len(df) > 1 else current_close
+
+            if prev_close <= 0:
+                return None
+
+            return {
+                "symbol": symbol,
+                "price": round(current_close, 2),
+                "change": round(current_close - prev_close, 2),
+                "change_pct": round((current_close - prev_close) / prev_close * 100, 2),
+                "prev_close": round(prev_close, 2),
+            }
+    except Exception as e:
+        print(f"[VNSTOCK] Failed for {symbol}: {e}", file=sys.stderr)
+    return None
+
+
+def _fetch_vn_stock_via_yahoo_fallback(symbol: str):
+    """Fallback: fetch VN stock via Yahoo Finance directly."""
+    try:
+        sym = f"{symbol}.VN"
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}"
+        r = _retry_request(url, timeout=15)
+
+        if r is None:
             return None
 
-        meta = result_data[0].get("meta", {})
+        data = r.json()
+        result_list = data.get("chart", {}).get("result", [{}])
+        meta = result_list[0].get("meta", {}) if result_list else {}
+
         price = meta.get("regularMarketPrice")
         prev_close = meta.get("previousClose")
 
         if price is None or prev_close is None:
             return None
 
-        change = price - prev_close
-        change_pct = (change / prev_close * 100) if prev_close > 0 else 0
-
-        # Get 1W / 1M / 1Q changes
-        periods = {
-            "1wk": {"interval": "1d", "range": "5d"},
-            "1mo": {"interval": "1d", "range": "21d"},
-            "1q": {"interval": "1d", "range": "63d"},
-        }
-        time_changes = {}
-        for period, params in periods.items():
-            try:
-                turl = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}.VN"
-                params_dict = {
-                    "interval": params["interval"],
-                    "range": params["range"],
-                }
-                tr = requests.get(turl, params=params_dict, timeout=10, headers=HEADERS)
-                tdata = tr.json()
-                tmeta = tdata.get("chart", {}).get("result", [{}])[0].get("meta", {})
-                open_price = tmeta.get("chartPreviousClose") or tmeta.get("open")
-                if open_price and open_price > 0:
-                    pct = ((price - open_price) / open_price) * 100
-                    time_changes[period] = round(pct, 2)
-            except Exception:
-                time_changes[period] = None
-
-        # Chart data for candlestick (last 1 month)
-        chart_data = None
         try:
-            chart_r = requests.get(
-                f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}.VN",
-                params={"interval": "30m", "range": "5d"},
-                timeout=10, headers=HEADERS
-            )
-            chart_json = chart_r.json()
-            chart_result = chart_json.get("chart", {}).get("result", [{}])[0]
-            timestamps = chart_result.get("timestamp", [])
-            ohlcv = chart_result.get("indicators", {}).get("quote", [{}])[0]
-            if timestamps:
-                chart_data = []
-                for j, ts in enumerate(timestamps[:100]):
-                    chart_data.append({
-                        "time": datetime.fromtimestamp(ts).isoformat(),
-                        "open": ohlcv.get("open", [None])[j],
-                        "high": ohlcv.get("high", [None])[j],
-                        "low": ohlcv.get("low", [None])[j],
-                        "close": ohlcv.get("close", [None])[j],
-                        "volume": ohlcv.get("volume", [None])[j],
-                    })
-        except Exception:
-            pass
+            p = float(price)
+            pc = float(prev_close)
+        except (ValueError, TypeError):
+            return None
+
+        if pc <= 0:
+            return None
 
         return {
-            "price": round(price, 2),
-            "change": round(change, 2),
-            "change_pct": round(change_pct, 2),
-            "prev_close": round(prev_close, 2),
-            "time_changes": time_changes,
-            "chart_data": chart_data,
             "symbol": symbol,
+            "price": round(p, 2),
+            "change": round(p - pc, 2),
+            "change_pct": round((p - pc) / pc * 100, 2),
+            "prev_close": round(pc, 2),
         }
+
     except Exception as e:
-        print(f"[WARN] Yahoo fetch failed for {symbol}: {e}", file=__import__("sys").stderr)
+        print(f"[YAHOO] Fallback failed for {symbol}: {e}", file=sys.stderr)
         return None
 
 
+def fetch_single_vn_stock(symbol: str):
+    """Fetch a single VN stock: try vnstock3 first, then Yahoo."""
+    # Try vnstock3 first
+    data = _fetch_vn_stock_via_vnstock3(symbol)
+    if data:
+        print(f"[OK] {symbol}: price={data['price']} (via vnstock3)")
+        return data
+
+    # Fallback to Yahoo Finance with retry
+    data = _fetch_vn_stock_via_yahoo_fallback(symbol)
+    if data:
+        print(f"[OK] {symbol}: price={data['price']} (via Yahoo fallback)")
+        return data
+
+    print(f"[FAIL] {symbol}: All sources exhausted", file=sys.stderr)
+    return None
+
+
+# --- Chart data helper ---
+
+def _fetch_chart_data(symbol: str):
+    """Fetch intraday chart data (last 5 days, 30min interval)."""
+    try:
+        sym = symbol if symbol.endswith(".VN") else f"{symbol}.VN"
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}"
+        r = _retry_request(url, params={"interval": "30m", "range": "5d"}, timeout=15)
+        if r is None:
+            return None
+
+        data = r.json()
+        result_list = data.get("chart", {}).get("result", [{}])
+        chart_result = result_list[0] if result_list else {}
+        timestamps = chart_result.get("timestamp", [])
+        ohlcv = chart_result.get("indicators", {}).get("quote", [{}])[0]
+
+        if not timestamps:
+            return None
+
+        chart_data = []
+        for j, ts in enumerate(timestamps[:100]):
+            try:
+                chart_data.append({
+                    "time": datetime.fromtimestamp(int(ts)).isoformat(),
+                    "open": int(ohlcv.get("open", [None])[j]) if ohlcv.get("open") and j < len(ohlcv.get("open", [])) else None,
+                    "high": int(ohlcv.get("high", [None])[j]) if ohlcv.get("high") and j < len(ohlcv.get("high", [])) else None,
+                    "low": int(ohlcv.get("low", [None])[j]) if ohlcv.get("low") and j < len(ohlcv.get("low", [])) else None,
+                    "close": int(ohlcv.get("close", [None])[j]) if ohlcv.get("close") and j < len(ohlcv.get("close", [])) else None,
+                    "volume": int(ohlcv.get("volume", [None])[j]) if ohlcv.get("volume") and j < len(ohlcv.get("volume", [])) else None,
+                })
+            except (ValueError, TypeError, IndexError):
+                continue
+
+        return chart_data if chart_data else None
+
+    except Exception as e:
+        print(f"[WARN] Chart fetch failed for {symbol}: {e}", file=sys.stderr)
+        return None
+
+
+# --- Main fetch functions ---
+
 def fetch_vn_indices():
     """Fetch VN-Index and major VN stocks."""
-    vn_symbols = {
+    symbols = {
         "^VNINDEX.VN": "VN-Index",
         "^HOSECAP": "HOSE Cap",
     }
     results = {}
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        futures = {executor.submit(_fetch_yahoo_price, sym): name for sym, name in vn_symbols.items()}
-        for future in as_completed(futures):
-            name = futures[future]
-            try:
-                data = future.result()
-                if data:
-                    results[name] = data
-            except Exception as e:
-                print(f"[WARN] VN index error for {name}: {e}", file=__import__("sys").stderr)
+
+    # Sequential with delay to avoid rate limiting
+    time.sleep(0.5)  # initial delay
+    for yahoo_sym, name in symbols.items():
+        data = _fetch_yahoo_price(yahoo_sym, is_vn=False)
+        if data:
+            results[name] = data
+        time.sleep(1)  # rate limit delay between requests
+
     return results
 
 
 def fetch_global_indices():
     """Fetch global indices from Yahoo Finance."""
-    config_module = __import__("core.config", fromlist=["load_config"])
-    config = config_module.load_config()
+    try:
+        import core.config as config_mod
+        config = config_mod.load_config() if hasattr(config_mod, "load_config") else {}
+    except Exception:
+        config = {}
+
     global_map = config.get("global_indices", {
         "^GSPC": "S&P 500",
         "^DJI": "Dow Jones",
@@ -134,16 +353,13 @@ def fetch_global_indices():
     })
 
     results = {}
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = {executor.submit(_fetch_yahoo_price, sym): name for sym, name in global_map.items()}
-        for future in as_completed(futures):
-            name = futures[future]
-            try:
-                data = future.result()
-                if data:
-                    results[name] = data
-            except Exception as e:
-                print(f"[WARN] Global index error for {name}: {e}", file=__import__("sys").stderr)
+    time.sleep(0.5)  # initial delay
+    for yahoo_sym, name in global_map.items():
+        data = _fetch_yahoo_price(yahoo_sym, is_vn=False)
+        if data:
+            results[name] = {**data, "symbol": yahoo_sym}
+        time.sleep(1.2)  # rate limit delay
+
     return results
 
 
@@ -151,22 +367,20 @@ def fetch_crypto():
     """Fetch BTC, ETH, SOL prices."""
     crypto_map = {"BTC-USD": "BTC", "ETH-USD": "ETH", "SOL-USD": "SOL"}
     results = {}
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        futures = {executor.submit(_fetch_yahoo_price, sym): name for sym, name in crypto_map.items()}
-        for future in as_completed(futures):
-            name = futures[future]
-            try:
-                data = future.result()
-                if data:
-                    results[name] = data
-            except Exception as e:
-                print(f"[WARN] Crypto fetch error for {name}: {e}", file=__import__("sys").stderr)
+
+    time.sleep(0.5)
+    for yahoo_sym, name in crypto_map.items():
+        data = _fetch_yahoo_price(yahoo_sym, is_vn=False)
+        if data:
+            results[name] = {**data, "symbol": yahoo_sym}
+        time.sleep(1)
+
     return results
 
 
 def fetch_gold():
     """Fetch gold price (GC=F)."""
-    data = _fetch_yahoo_price("GC=F")
+    data = _fetch_yahoo_price("GC=F", is_vn=False)
     if data:
         return {"name": "Gold", "symbol": "GC=F", **data}
     return None
@@ -174,7 +388,7 @@ def fetch_gold():
 
 def fetch_oil():
     """Fetch WTI oil price (CL=F)."""
-    data = _fetch_yahoo_price("CL=F")
+    data = _fetch_yahoo_price("CL=F", is_vn=False)
     if data:
         return {"name": "WTI Oil", "symbol": "CL=F", **data}
     return None
@@ -182,128 +396,99 @@ def fetch_oil():
 
 def fetch_dxy():
     """Fetch DXY (US Dollar Index)."""
-    data = _fetch_yahoo_price("DX-Y.NYB")
+    data = _fetch_yahoo_price("DX-Y.NYB", is_vn=False)
     if data:
         return {"name": "DXY", "symbol": "DX-Y.NYB", **data}
     return None
 
 
 def fetch_all_overview():
-    """Fetch ALL market overview data in parallel.
-    Returns: dict with keys: vn_indices, global_indices, crypto, gold, oil, dxy
+    """Fetch ALL market overview data.
+
+    FIX: Split into sequential calls with delays instead of parallel
+    to avoid Yahoo Finance rate limiting (HTTP 429).
     """
     results = {}
+    errors = []
 
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        futures = {
-            executor.submit(fetch_vn_indices): "vn_indices",
-            executor.submit(fetch_global_indices): "global_indices",
-            executor.submit(fetch_crypto): "crypto",
-            executor.submit(fetch_gold): "gold",
-            executor.submit(fetch_oil): "oil",
-            executor.submit(fetch_dxy): "dxy",
-        }
-        for future in as_completed(futures):
-            key = futures[future]
-            try:
-                data = future.result()
-                if data:
-                    results[key] = data
-            except Exception as e:
-                print(f"[WARN] Overview fetch failed for {key}: {e}", file=__import__("sys").stderr)
+    print("[FETCH] Starting full market overview fetch...")
+
+    # Fetch each category sequentially with delays
+    try:
+        time.sleep(0.5)
+        vn_data = fetch_vn_indices()
+        if vn_data:
+            results["vn_indices"] = vn_data
+            print(f"[OK] VN indices: {len(vn_data)} fetched")
+        else:
+            errors.append("VN indices")
+
+        time.sleep(2)
+        global_data = fetch_global_indices()
+        if global_data:
+            results["global_indices"] = global_data
+            print(f"[OK] Global indices: {len(global_data)} fetched")
+        else:
+            errors.append("Global indices")
+
+        time.sleep(2)
+        crypto_data = fetch_crypto()
+        if crypto_data:
+            results["crypto"] = crypto_data
+            print(f"[OK] Crypto: {len(crypto_data)} fetched")
+        else:
+            errors.append("Crypto")
+
+        time.sleep(1.5)
+        for name, fetcher in [("gold", fetch_gold), ("oil", fetch_oil), ("dxy", fetch_dxy)]:
+            data = fetcher()
+            if data:
+                results[name] = data
+                print(f"[OK] {name}: fetched")
+            else:
+                errors.append(name)
+            time.sleep(1)
+
+    except Exception as e:
+        print(f"[ERROR] Overview fetch error: {e}", file=sys.stderr)
+        errors.append(str(e))
 
     results["updated_at"] = datetime.now().isoformat()
+    if errors:
+        results["_partial"] = True
+        results["_errors"] = errors
+        print(f"[WARN] Partial data: missing {', '.join(errors)}")
+
     return results
 
 
 def get_top_motions(symbols=None, limit=10):
     """Get top movers from a list of VN stocks.
-    Uses TCInvest or direct Yahoo fetch for VN stocks.
+
+    Uses vnstock3 first, then Yahoo Finance fallback with retry.
     """
-    # Default VN-30 symbols if none provided
     if not symbols:
-        symbols = ["VIC", "VNM", "VCB", "HPG", "MSN", "GAS", "MWG", "FPT", "TCB", "MBB",
-                   "HDB", "BID", "CTG", "STB", "ACB", "VPB", "TPB", "SHB", "VCB", "TPB"]
+        symbols = ["VIC", "VNM", "VCB", "HPG", "MSN", "FPT", "TCB", "MBB",
+                     "HDB", "BID", "CTG", "STB", "ACB", "MWG"]
 
     results = []
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = {executor.submit(_fetch_single_vn_stock, sym): sym for sym in symbols}
-        for future in as_completed(futures):
-            sym = futures[future]
-            try:
-                data = future.result()
-                if data:
-                    results.append(data)
-            except Exception:
-                pass
+    for i, sym in enumerate(symbols):
+        # Stagger to avoid rate limiting
+        if i > 0:
+            time.sleep(1.5)
 
-    # Sort by change_pct and return top N gainers + losers
+        data = fetch_single_vn_stock(sym)
+        if data:
+            results.append(data)
+        else:
+            print(f"[SKIP] {sym}: no data available", file=sys.stderr)
+
+    # Sort by change_pct
     results.sort(key=lambda x: x.get("change_pct", 0), reverse=True)
-    top_gainers = results[:limit // 2]
-    top_losers = results[-(limit // 2):]
+    top_gainers = results[:limit // 2] if len(results) >= limit // 2 else []
+    top_losers = results[-(limit // 2):] if len(results) >= limit // 2 else []
+
     return {
         "gainers": top_gainers,
         "losers": top_losers,
     }
-
-
-def _fetch_single_vn_stock(symbol: str):
-    """Fetch a single VN stock via vnstock4 API (primary) or Yahoo Finance (fallback)."""
-    # Try vnstock4 first ? it returns correct VND prices (thousands * 1000)
-    try:
-        import sys
-        from pathlib import Path
-        _venv_path = Path("/Users/nghialam/.hermes/hermes-agent/venv/lib/python3.11/site-packages")
-        if _venv_path.exists() and "/usr" not in str(_venv_path):
-            sys.path.insert(0, str(_venv_path))
-        from vnstock.api.quote import Quote as VsQuote
-        
-        q = VsQuote(symbol=symbol, show_log=False)
-        df = q.history(symbol=symbol, start="2026-04-01", end="2026-07-01")
-        
-        if not df.empty:
-            latest = df.iloc[-1]
-            # vnstock returns prices in "ngh?n đồng" * 1000 for actual VND
-            current_close = float(latest["close"]) * 1000
-            prev_close = (float(df.iloc[-2]["close"]) * 1000) if len(df) > 1 else current_close
-            change = current_close - prev_close
-            change_pct = (change / prev_close * 100) if prev_close > 0 else 0
-            
-            return {
-                "symbol": symbol,
-                "price": round(current_close, 2),
-                "change": round(change, 2),
-                "change_pct": round(change_pct, 2),
-                "prev_close": round(prev_close, 2),
-            }
-    except Exception as _e:
-        pass   # Fall through to Yahoo
-    
-    try:
-        # vnstock unavailable or failed ? fallback to Yahoo Finance
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}.VN"
-        r = requests.get(url, timeout=10, headers=HEADERS)
-        data = r.json()
-        result_data = data.get("chart", {}).get("result")
-        if not result_data:
-            return None
-
-        meta = result_data[0].get("meta", {})
-        price = meta.get("regularMarketPrice")
-        prev_close = meta.get("previousClose")
-
-        if price is None or prev_close is None:
-            return None
-
-        change = price - prev_close
-        change_pct = (change / prev_close * 100) if prev_close > 0 else 0
-
-        return {
-            "symbol": symbol,
-            "price": round(price, 2),
-            "change": round(change, 2),
-            "change_pct": round(change_pct, 2),
-            "prev_close": round(prev_close, 2),
-        }
-    except Exception as e:
-        return None

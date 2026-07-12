@@ -15,6 +15,12 @@ from datetime import datetime, timedelta
 
 import requests
 from flask import Flask, render_template, request, jsonify
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler
+    from apscheduler.triggers.cron import CronTrigger
+    APSCHEDULER_AVAILABLE = True
+except ImportError:
+    APSCHEDULER_AVAILABLE = False
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "core"))
 
@@ -192,18 +198,65 @@ def _refresh_data():
         print("[REFRESH] Full refresh failed: %s" % e)
 
 
+# --- APScheduler Background Jobs ------------------------------------------
+
+_scheduler = None
+
+
+def _start_scheduler():
+    """Start the APScheduler with Market Intelligence cron job."""
+    global _scheduler
+    if not APSCHEDULER_AVAILABLE:
+        print("[SCHEDULER] APScheduler not available — skipping background jobs")
+        return
+    try:
+        _scheduler = BackgroundScheduler(timezone="Asia/Saigon")
+
+        # Market Intelligence pipeline runs every 6 hours at 06:00, 12:00, 18:00, 00:00
+        _scheduler.add_job(
+            func=_run_market_intelligence_pipeline,
+            trigger="cron",
+            hour=[6, 12, 18, 0],
+            minute=0,
+            id="market_intelligence_pipeline",
+            replace_existing=True,
+            max_instances=1,
+        )
+
+        # Refresh market data every 5 minutes
+        _scheduler.add_job(
+            func=_refresh_data,
+            trigger="interval",
+            minutes=5,
+            id="market_data_refresh",
+            replace_existing=True,
+        )
+
+        _scheduler.start()
+        print("[SCHEDULER] Started — Market Intelligence runs at 06:00, 12:00, 18:00, 00:00 SGT")
+    except Exception as e:
+        print("[SCHEDULER] Failed to start: %s" % e)
+
+
+def _run_market_intelligence_pipeline():
+    """Wrapper for running the Market Intelligence pipeline in background."""
+    try:
+        from core.market_intelligence import run_pipeline
+        result = run_pipeline()
+        print("[SCHEDULER] MI Pipeline completed: %s" % result.get("status", "unknown"))
+    except Exception as e:
+        print("[SCHEDULER] MI Pipeline failed: %s" % e)
+
+
 # --- Initialization ---------------------------------------------------------
 
 def _init():
-    _load_config()
-    _load_db()
-    _refresh_data()
-
-
-# ============================================================================
-#  API ENDPOINTS — Dashboard + Signals + Alerts
-# ============================================================================
-
+     """Initialize services. Data refresh runs in background thread to avoid blocking."""
+     _load_config()
+     _load_db()
+      # Start data refresh in background thread so Flask can start immediately
+     refresh_thread = threading.Thread(target=_refresh_data, daemon=True)
+     refresh_thread.start()
 
 @app.route("/")
 def index():
@@ -1792,25 +1845,116 @@ def ai_intelligence_health():
         return jsonify({"status": "error", "error": str(e)}), 500
 
 
+# --- Market Intelligence API Endpoints --------------------------------------
 
-
-def _init_server():
+@app.route("/api/market-intelligence/run", methods=["POST"])
+def api_market_intelligence_run():
+    """Trigger the Market Intelligence pipeline immediately."""
     try:
-        _load_config()
-        _load_db()
-        _refresh_data()
+        from core.market_intelligence import run_pipeline, determine_period
+        result = run_pipeline()
+        return jsonify(result)
     except Exception as e:
-        print("[INIT] Error during init: %s" % e)
+        print("[MI] Pipeline execution failed: %s" % e)
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
-# Run on import (for Flask app factory pattern)
-try:
-    _init_server()
-except Exception:
-    pass
+@app.route("/api/market-intelligence/latest", methods=["GET"])
+def api_market_intelligence_latest():
+    """Get the most recent Market Intelligence run."""
+    try:
+        if not db or not hasattr(db, "get_latest_market_intelligence"):
+            return jsonify({"status": "error", "message": "DB not initialized"})
+        data = db.get_latest_market_intelligence()
+        if not data:
+            return jsonify({"status": "not_found", "message": "No intelligence runs found"})
+        return jsonify({"status": "ok", "data": data})
+    except Exception as e:
+        print("[MI] Latest fetch failed: %s" % e)
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
-if __name__ == "__main__":
-    _init_server()
-    print("[APP] Starting Jarvis Hub Flask server on port 8100...")
-    app.run(host="0.0.0.0", port=8100, debug=False, use_reloader=False)
+@app.route("/api/market-intelligence/history", methods=["GET"])
+def api_market_intelligence_history():
+    """List past Market Intelligence runs, optionally filtered by date."""
+    try:
+        if not db or not hasattr(db, "get_market_intelligence_history"):
+            return jsonify({"status": "error", "message": "DB not initialized"})
+        limit = request.args.get("limit", 20, type=int)
+        data = db.get_market_intelligence_history(limit=limit)
+        return jsonify({"status": "ok", "count": len(data), "runs": data})
+    except Exception as e:
+        print("[MI] History fetch failed: %s" % e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/market-intelligence/<int:run_id>", methods=["GET"])
+def api_market_intelligence_by_id(run_id):
+    """Get a specific Market Intelligence run by ID."""
+    try:
+        if not db or not hasattr(db, "get_market_intelligence_by_id"):
+            return jsonify({"status": "error", "message": "DB not initialized"})
+        data = db.get_market_intelligence_by_id(run_id)
+        if not data:
+            return jsonify({"status": "not_found", "message": "Run %d not found" % run_id}), 404
+        return jsonify({"status": "ok", "data": data})
+    except Exception as e:
+        print("[MI] Run fetch failed for %d: %s" % (run_id, e))
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/market-intelligence/sentiment-dist", methods=["GET"])
+def api_market_intelligence_sentiment():
+    """Get sentiment distribution across all Market Intelligence runs."""
+    try:
+        if not db or not hasattr(db, "get_sentiment_distribution"):
+            return jsonify({"status": "error", "message": "DB not initialized"})
+        dist = db.get_sentiment_distribution()
+        return jsonify({"status": "ok", "distribution": dist})
+    except Exception as e:
+        print("[MI] Sentiment fetch failed: %s" % e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/market-intelligence/<int:run_id>", methods=["DELETE"])
+def api_market_intelligence_delete(run_id):
+    """Delete a specific Market Intelligence run by ID."""
+    try:
+        if not db or not hasattr(db, "delete_market_intelligence"):
+            return jsonify({"status": "error", "message": "DB not initialized"})
+        deleted = db.delete_market_intelligence(run_id)
+        if not deleted:
+            return jsonify({"status": "not_found", "message": "Run %d not found" % run_id}), 404
+        return jsonify({"status": "ok", "deleted": run_id})
+    except Exception as e:
+        print("[MI] Delete failed for %d: %s" % (run_id, e))
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+# --- Application entry point -------------------------------------------------
+
+if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser(description='Jarvis Hub 2.0 - Market Intelligence Portal')
+    parser.add_argument('--host', default='127.0.0.1', help='Host to bind to')
+    parser.add_argument('--port', type=int, default=8100, help='Port to listen on')
+    parser.add_argument('--debug', action='store_true', help='Enable debug mode')
+    args = parser.parse_args()
+
+    print('=' * 60)
+    print('  Jarvis Hub 2.0 - Market Intelligence Portal')
+    print('=' * 60)
+
+    # Initialize services
+    _init()
+
+    print(f'\n  Server running at http://{args.host}:{args.port}')
+    print(f'  Dashboard:      http://{args.host}:{args.port}/hub2')
+    print(f'  Health check:   http://{args.host}:{args.port}/health')
+    print('=' * 60)
+
+    app.run(
+        host=args.host,
+        port=args.port,
+        debug=args.debug,
+        threaded=True,
+     )

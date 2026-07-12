@@ -43,9 +43,9 @@ def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     if cfg.get("telegram"):
         cfg["telegram"]["openclaw_path"] = cfg["telegram"].get("openclaw_path", "/opt/homebrew/bin/openclaw")
 
-    if cfg.get("omlx"):
-        cfg["omlx"]["url"] = cfg["omlx"].get("url", "http://localhost:11434")
-        cfg["omlx"]["api_key"] = cfg["omlx"].get("api_key", "")
+    if cfg.get("ollama"):
+        cfg["ollama"]["url"] = cfg["ollama"].get("url", "http://localhost:11434")
+        cfg["ollama"]["api_key"] = cfg["ollama"].get("api_key", "")
 
     _config_cache = cfg
     return cfg

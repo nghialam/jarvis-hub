@@ -30,7 +30,7 @@ pip install -r requirements.txt   # flask, feedparser, requests, numpy, bs4, cli
 pip install vnstock               # VN stock data provider (from hermes-agent venv or system pip)
 ```
 
-### Step 3: Configure Ollama/OMLX
+### Step 3: Configure Ollama/Ollama
 Make sure Ollama is running and the model is pulled:
 ```bash
 ollama serve &                    # Start locally if not running
@@ -41,7 +41,7 @@ ollama pull qwen3.6:35b-a3b-mxfp8   # Or your preferred model
 Edit `config.yaml`:
 ```yaml
 # Required settings:
-omlx:
+ollama:
   url: "http://localhost:11434"
   model: "qwen3.6:35b-a3b-mxfp8"
 

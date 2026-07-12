@@ -10,7 +10,7 @@ def check_flask():
     except:
         return {'status': 'unreachable'}
 
-def check_omlx():
+def check_ollama():
     try:
         r = subprocess.run(['curl', '-s', '--max-time', '5', 'http://localhost:11434/health'], 
                           capture_output=True, text=True)
@@ -44,7 +44,7 @@ report = {
     "timestamp": datetime.datetime.now().isoformat(),
     "health_check": {
         "flask": check_flask(),
-        "omlx": check_omlx(),
+        "ollama": check_ollama(),
         "database": check_db(),
     },
     "actions_taken": [],

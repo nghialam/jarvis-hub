@@ -18,27 +18,11 @@ from urllib.error import URLError
 
 CHAT_ID = os.environ.get("JARVIS_TELEGRAM_CHAT_ID", "1670013239")
 
-def get_token():
-    """Fetch BOT_TOKEN from env or cache file."""
-    for key in ("JARVIS_BOT_TOKEN", "TELEGRAM_BOT_TOKEN"):
-        v = os.environ.get(key, "").strip()
-        if v:
-            return v
-    cp = os.path.expanduser("~/.hermes/.jarvis_token_cache")
-    try:
-        with open(cp) as fh:
-            c = fh.read().strip()
-            if c and len(c) > 50:
-                return c
-    except Exception:
-        pass
-    return ""
+# Use ollama_client for LLM calls
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from core.ollama_client import ollama_call as _ollama_call
 
-BOT_TOKEN = get_token()
-OMLX_HOST = os.environ.get("OMLX_HOST", "http://localhost:11434")
-LLM_MODEL = os.environ.get("JARVIS_LLM", "Qwen3.6-35B-A3B-MLX-8bit")
-
-ENT_FEEDS = [
+LLM_MODEL = os.environ.get("JARVIS_LLM", "qwen3.6:35b-a3b-mxfp8")
     {"name": "Variety",            "url": "https://variety.com/feed/"},
     {"name": "Hollywood Reporter", "url": "http://www.hollywoodreporter.com/feed/"},
     {"name": "Deadline Hollywood", "url": "https://deadline.com/feed/"},
@@ -173,8 +157,8 @@ def collect_all():
             unique.append(a)
     return unique[:50]
 
-def omlx_call(prompt, system_prompt="", max_tokens=5000):
-    """Call OMLX /v1/chat/completions endpoint. qwen3.6 uses 'thinking' field."""
+def ollama_call(prompt, system_prompt="", max_tokens=5000):
+    """Call OLLAMA /v1/chat/completions endpoint. qwen3.6 uses 'thinking' field."""
     payload = json.dumps({
          "model": LLM_MODEL,
          "messages": [
@@ -186,24 +170,12 @@ def omlx_call(prompt, system_prompt="", max_tokens=5000):
     }).encode("utf-8")
 
     try:
-        req = Request("%s/v1/chat/completions" % OMLX_HOST, data=payload,
-                       headers={"Content-Type": "application/json"})
-        resp = urlopen(req, timeout=60)
-        result = json.loads(resp.read())
-        # qwen3.6 puts all text in 'thinking', not 'content'
-        msg = result.get("message", {})
-        full_resp = (msg.get("thinking") or msg.get("content") or "").strip()
-        # Strip thinking/reasoning for cleaner output  
-        if "thinking" in msg and len(msg.get("thinking","")) > 500:
-            content = msg.get("content","").strip()
-            if content:
-                full_resp = content
-        return full_resp.strip()
+        resp = _ollama_call(prompt, system_prompt=system_prompt)
+        return resp.strip() if resp else ""
     except Exception as exc:
-        print("[OMLX ERROR]: %s: %s" % (type(exc).__name__, str(exc)))
-        if "8000" in str(exc):
-            return "OMLX not running -- start omlx"
-        return ""
+        print("[OLLAMA ERROR]: %s: %s" % (type(exc).__name__, str(exc)))
+        if "11434" in str(exc):
+            return "Ollama not running -- start ollama serve"
 
 def build_prompts(date_str, art_text):
     """Build two sequential LLM prompts."""
@@ -252,17 +224,13 @@ def run():
 
      # Sanity check: verify Ollama is running before wasting time
     try:
-        from urllib.request import urlopen as _ur
-        resp = _ur("%s/v1/models" % OMLX_HOST, timeout=5)
-        tags = json.loads(resp.read())
-        models_list = [m["name"] for m in tags.get("models", [])]
-        if LLM_MODEL not in models_list:
-            print("[ERR] Model '%s' not loaded in Ollama" % LLM_MODEL)
-            print("[WARN] Falling back gracefully.")
-            send_telegram("*Ollama error* — model not available. Check ollama serve.\n")
+        resp = _ollama_call("List available models")
+        if not resp or "error" in resp.lower():
+            print("[ERR] Ollama not reachable")
+            send_telegram("*Ollama error* — backend not running. Can't run LLM.\n")
             return
     except Exception:
-        print("[ERR] Ollama not reachable at %s" % OMLX_HOST)
+        print("[ERR] Ollama not reachable")
         print("[WARN] Falling back gracefully.")
         send_telegram("*Ollama error* — backend not running. Can't run LLM.\n")
         return
@@ -301,7 +269,7 @@ def run():
     for attempt in range(3):
         try:
             p = prompts["hot"] + "\n\n" + art_text
-            r = omlx_call(p, system_prompt=sp, max_tokens=5000)
+            r = ollama_call(p, system_prompt=sp, max_tokens=5000)
             if len(r) > 100 and "Error" not in r[:20]:
                 llm_hot = r
                 print("     [OK] Hot: %d chars" % len(llm_hot))
@@ -323,7 +291,7 @@ def run():
     for attempt in range(3):
         try:
             p = prompts["watch"] + "\n\n" + art_text
-            r = omlx_call(p, system_prompt=sp, max_tokens=32768)
+            r = ollama_call(p, system_prompt=sp, max_tokens=32768)
             if len(r) > 50 and "Error" not in r[:20]:
                 llm_watch = r
                 print("     [OK] Watch: %d chars" % len(llm_watch))

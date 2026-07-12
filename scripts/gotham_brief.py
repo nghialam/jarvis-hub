@@ -50,8 +50,8 @@ def _get_token():
 
 
 BOT_TOKEN = _get_token()
-OMLX_URL = os.environ.get("OMLX_HOST", "http://localhost:11434")
-LLM_MODEL = os.environ.get("LLM_MODEL", "Qwen3.6-35B-A3B-MLX-8bit")
+OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+LLM_MODEL = os.environ.get("LLM_MODEL", "qwen3.6:35b-a3b-mxfp8")
 
 RSS_SOURCES = [
     # === VN ECONOMY/BUSINESS (3) ===
@@ -327,7 +327,7 @@ def get_llm(system_prompt, articles_text, timeout=300):
     req_data = json.dumps(payload).encode("utf-8")
     try:
         req = urllib.request.Request(
-            f"{OMLX_URL}/v1/chat/completions", data=req_data,
+            f"{OLLAMA_URL}/v1/chat/completions", data=req_data,
             headers={"Content-Type": "application/json"}
         )
         resp = urllib.request.urlopen(req, timeout=timeout)
@@ -377,7 +377,7 @@ def get_llm(system_prompt, articles_text, timeout=300):
     except Exception as e:
         print(f"[LLM ERROR] {type(e).__name__}: {e}", file=sys.stderr)
         if "8000" in str(e):
-            return "OMLX not running - start omlx"
+            return "OLLAMA not running - start ollama"
         return f"[LLM Error: {type(e).__name__}]"
 
 

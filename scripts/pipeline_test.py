@@ -133,7 +133,7 @@ def verify_flask():
         resp_health = client.get("/api/health")
         health = resp_health.get_json()
         print(f"  🔗 /api/health: {resp_health.status_code}")
-        print(f"     Ollama: {health.get('omlx', 'unknown')}")
+        print(f"     Ollama: {health.get('ollama', 'unknown')}")
         print(f"     DB: {health.get('db_path', 'N/A')}")
         
         return True

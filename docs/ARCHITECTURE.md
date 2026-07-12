@@ -70,7 +70,7 @@ Jarvis Hub is a **local finance intelligence platform** consisting of:
 | **news_engine.py** | Enhanced news engine (Hub 2.0) | `fetch_all_news()`, `_heuristic_sentiment()`, `save_news_to_db()` |
 | **news_service.py** | News service with threading cache | `get_articles()`, `get_exchange_rates()`, `_NewsCache` |
 | **llm_cache.py** | TTL + circuit breaker for LLM calls | `LLMResponseCache.get_or_call(circuit_threshold=3, recovery_window=60s)` |
-| **omlx_client.py** | OMLX (mlx-lm) API client | `omlx_call(prompt)`, `omlx_parse_json(prompt)` |
+| **ollama_client.py** | Ollama (mlx-lm) API client | `ollama_call(prompt)`, `ollama_parse_json(prompt)` |
 | **research_crawler.py** | Brokerage report crawler (SSI, VCI, HCM, TCBS, VCBS) | `crawl_all_brokers()`, `store_reports()`, `generate_llm_summary()` |
 | **tier_data_collector.py** | Tier 1: Raw data collection (NO LLM) | `run_collection()` → feeds `market_quotes` & `news_articles` tables |
 | **tier_llm_analyst.py** | Tier 2: LLM analysis pipeline | `run_analysis()` → calls Ollama, cleans preamble, saves `analytical_reports` |
@@ -330,7 +330,7 @@ All jobs run on `qwen3.6:35b-a3b-mxfp8` via Ollama (`localhost:11434`), deliver 
 jarvis-hub/
 ├── app.py                    # Flask web server (main entry point, port 8100)
 ├── cli.py                    # CLI tool via Click (briefing, analyze, watch, search, quiz, log, history, doctor)
-├── config.yaml               # Configuration: Ollama/OMLX, feeds, schedule, db_path
+├── config.yaml               # Configuration: Ollama/Ollama, feeds, schedule, db_path
 ├── vnstock4_provider.py      # vnstock4 OHLCV wrapper with VND multiplier
 ├── seed_kb.py                # Seed knowledge base entries
 ├── core/                     # Core engine package
@@ -345,7 +345,7 @@ jarvis-hub/
 │   ├── news_engine.py        # Enhanced news engine for Hub 2.0
 │   ├── news_service.py       # News service with threading cache
 │   ├── llm_cache.py          # TTL + circuit breaker for LLM responses
-│   ├── omlx_client.py        # OMLX (mlx-lm) API client
+│   ├── ollama_client.py        # Ollama (mlx-lm) API client
 │   ├── research_crawler.py   # Brokerage report crawler (SSI, VCI, HCM, TCBS, VCBS)
 │   ├── tier_data_collector.py# Tier 1: Raw data collection (feeds market_quotes/news_articles)
 │   └── tier_llm_analyst.py   # Tier 2: LLM analysis pipeline with preamble cleanup

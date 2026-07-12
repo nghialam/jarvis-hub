@@ -7,10 +7,10 @@ telegram:
   target_chat_id: "1670013239"
   openclaw_path: "/opt/homebrew/bin/openclaw"
 
-omlx:
+ollama:
   url: "http://localhost:11434"
-  model: "Qwen3.6-35B-A3B-MLX-8bit"
-  api_key: "0979794448"
+  model: "qwen3.6:35b-a3b-mxfp8"
+  api_key: ""
 
 feed:
   sources:
@@ -36,6 +36,17 @@ feed:
       url: "http://feeds.bbci.co.uk/news/business/rss.xml"
       category: "global-economy"
       priority: 3
+    # Global markets (continued)
+    - name: "CNBC Top News"
+      url: "https://rss.cnbc.com/api/rss/LatestNews/rss.xml"
+      category: "global-business"
+      priority: 3
+
+    # Social & Real-time news
+    - name: "Reddit Breaking News"
+      url: "https://oldpush.reddit.com/r/breakingnews/.rss"
+      category: "social-news"
+      priority: 4
 
     # AI & Tech
     - name: "TechCrunch"

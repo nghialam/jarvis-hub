@@ -44,7 +44,7 @@ try:
     health_data = json.loads(r.read().decode())
     print(f"✅ /api/health -> {r.status_code}")
     print(f"   DB path: {health_data.get('db_path', 'N/A')}")
-    print(f"   Ollama: {health_data.get('omlx', 'unknown')}")
+    print(f"   Ollama: {health_data.get('ollama', 'unknown')}")
 except Exception as e:
     print(f"❌ /api/health FAILED: {e}")
     sys.exit(1)

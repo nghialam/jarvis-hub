@@ -11,6 +11,7 @@ Usage:
 import json
 import re
 import sys
+import time
 import urllib.request
 import urllib.error
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -21,6 +22,44 @@ import feedparser
 import html as html_module
 import numpy as np
 import requests
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+
+# Rate limiting retries for Yahoo Finance (avoids 429)
+_MAX_YAHOO_RETRY = 3
+_YAHOO_RETRY_DELAY = 2
+
+
+def _yahoo_retry(url, headers=None, timeout=15):
+    """Fetch with exponential back-off to handle Yahoo rate-limit."""
+    hdrs = headers or _HEADERS
+    last_err = None
+    for attempt in range(_MAX_YAHOO_RETRY):
+        try:
+            r = requests.get(url, timeout=timeout, headers=hdrs)
+            if r.status_code == 429:
+                wait = _YAHOO_RETRY_DELAY * (2 ** attempt)
+                print(f"[RETRY] Yahoo 429 for {url}, waits {wait}s (attempt {attempt+1}/{_MAX_YAHOO_RETRY})", file=sys.stderr)
+                time.sleep(wait)
+                continue
+            if r.status_code >= 500:
+                wait = _YAHOO_RETRY_DELAY * (2 ** attempt)
+                print(f"[RETRY] Yahoo {r.status_code} for {url}, waits {wait}s", file=sys.stderr)
+                time.sleep(wait)
+                continue
+            return r
+        except requests.exceptions.Timeout as e:
+            last_err = e
+            wait = _YAHOO_RETRY_DELAY * (2 ** attempt)
+            print(f"[RETRY] Timeout for {url}, waits {wait}s", file=sys.stderr)
+            time.sleep(wait)
+        except requests.exceptions.ConnectionError as e:
+            last_err = e
+            if attempt < _MAX_YAHOO_RETRY - 1:
+                time.sleep(2 * (attempt + 1))
+    print(f"[ERROR] All retries failed for {url}: {last_err}", file=sys.stderr)
+    return None
 
 
 _BULLISH_PATTERNS = [
@@ -190,17 +229,17 @@ def enrich_article(article: dict, use_llm: bool = False) -> dict:
     if use_llm and _get_config() is not None:
         try:
             config = _get_config()
-            omlx_url = config.get("omlx", {}).get("url", "http://localhost:11434")
-            model = config.get("omlx", {}).get("model", "qwen3.6:latest")
+            ollama_url = config.get("ollama", {}).get("url", "http://localhost:11434")
+            model = config.get("ollama", {}).get("model", "qwen3.6:latest")
 
             prompt = (
-                "Ban la tro gi phan tich thi truong tai chinh Viet Nam.\n"
-                "Title: %s\nContent: %s\n\n"
-                '{"sentiment": "tich_cuc|tieu_cuc|trung_lap", "reason": "reason text"}'
+                 "Ban la tro gi phan tich thi truong tai chinh Viet Nam.\n"
+                 "Title: %s\nContent: %s\n\n"
+                 '{"sentiment": "tich_cuc|tieu_cuc|trung_lap", "reason": "reason text"}'
             ) % (title, summary[:500])
 
             resp = requests.post(
-                omlx_url + "/v1/chat/completions",
+                ollama_url + "/v1/chat/completions",
                 json={
                     "model": model,
                     "messages": [
@@ -407,36 +446,34 @@ def fetch_market_indices() -> dict:
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     try:
-        r = requests.get(
-            "https://query1.finance.yahoo.com/v8/finance/chart/^VNINDEX.VN",
-            timeout=8, headers=_HEADERS
-        )
-        if r.status_code == 200:
+        r = _yahoo_retry(
+             "https://query1.finance.yahoo.com/v8/finance/chart/^VNINDEX.VN",
+            timeout=15
+         )
+        if r and r.status_code == 200:
             result_list = r.json().get("chart", {}).get("result")
             if result_list:
                 meta = result_list[0].get("meta", {})
                 prev = float(meta.get("previousClose", 0) or 1)
                 p = float(meta.get("regularMarketPrice", 0))
                 vn_indices["VN-Index"] = {
-                    "price": round(p, 2),
-                    "change": round(p - prev, 2),
-                    "change_pct": round((p - prev) / max(prev, 1) * 100, 2),
-                    "prev_close": round(prev, 2),
-                }
+                     "price": round(p, 2),
+                     "change": round(p - prev, 2),
+                     "change_pct": round((p - prev) / max(prev, 1) * 100, 2),
+                     "prev_close": round(prev, 2),
+                 }
     except Exception:
         pass
 
-    with ThreadPoolExecutor(max_workers=5) as ex:
-        futures = {ex.submit(_fetch_single_index, sym, name_map): sym for sym in name_map}
-        for f in as_completed(futures):
-            try:
-                display, data = f.result()
-                if isinstance(display, str):
-                    vn_indices[display] = data or {}
-                elif data:
-                    global_indices[display[0]] = data
-            except Exception:
-                pass
+     # Fetch global indices sequentially to avoid rate limit
+    for i, sym in enumerate(name_map.keys()):
+        display = name_map.get(sym)
+        time.sleep(1.0 + 0.5 * i)   # stagger requests
+        _display, data = _fetch_single_index(sym, {sym: display})
+        if isinstance(_display, str):
+            vn_indices[_display] = data or {}
+        elif data:
+            global_indices[_display[0]] = data
 
     return {
         "vn_indices": vn_indices,
@@ -451,10 +488,12 @@ def _fetch_single_index(symbol: str, name_map: dict):
         return (symbol, None)
 
     try:
-        r = requests.get(
-            "https://query1.finance.yahoo.com/v8/finance/chart/" + symbol,
-            timeout=8, headers=_HEADERS
-        )
+        r = _yahoo_retry(
+              "https://query1.finance.yahoo.com/v8/finance/chart/" + symbol,
+            timeout=15
+          )
+        if r is None or r.status_code != 200:
+            return (display_name_info, None)
         data = r.json()
         result_data = data.get("chart", {}).get("result")
         if not result_data:
@@ -470,11 +509,11 @@ def _fetch_single_index(symbol: str, name_map: dict):
         prev = float(prev_close)
         cur = float(price)
         parsed_result = {
-            "price": round(cur, 2),
-            "change": round(cur - prev, 2),
-            "change_pct": round((cur - prev) / max(prev, 1) * 100, 2),
-            "prev_close": round(prev, 2),
-        }
+              "price": round(cur, 2),
+              "change": round(cur - prev, 2),
+              "change_pct": round((cur - prev) / max(prev, 1) * 100, 2),
+              "prev_close": round(prev, 2),
+         }
         return (display_name_info, parsed_result)
 
     except Exception as exc:
@@ -518,11 +557,11 @@ def fetch_gold() -> Optional[dict]:
     candidates = ["XAU/USD", "GC=F", "GLD", "XAUUSD=X"]
     for sym in candidates:
         try:
-            r = requests.get(
-                "https://query1.finance.yahoo.com/v8/finance/chart/" + sym,
-                timeout=5, headers=_HEADERS
-            )
-            if r.status_code == 200:
+            r = _yahoo_retry(
+                 "https://query1.finance.yahoo.com/v8/finance/chart/" + sym,
+                timeout=15
+              )
+            if r and r.status_code == 200:
                 result_list = r.json().get("chart", {}).get("result", [{}])
                 meta = result_list[0].get("meta", {})
                 price = meta.get("regularMarketPrice")
@@ -544,11 +583,11 @@ def fetch_gold() -> Optional[dict]:
 def fetch_dxy() -> Optional[dict]:
     """Fetch DXY (US Dollar Index)."""
     try:
-        r = requests.get(
-            "https://query1.finance.yahoo.com/v8/finance/chart/DX-Y.NYB",
-            timeout=6, headers=_HEADERS
-        )
-        if r.status_code == 200:
+        r = _yahoo_retry(
+                 "https://query1.finance.yahoo.com/v8/finance/chart/DX-Y.NYB",
+                timeout=15
+               )
+        if r and r.status_code == 200:
             result_list = r.json().get("chart", {}).get("result", [{}])
             meta = result_list[0].get("meta", {})
             price = meta.get("regularMarketPrice")
@@ -568,11 +607,11 @@ def fetch_dxy() -> Optional[dict]:
 def fetch_oil() -> Optional[dict]:
     """Fetch WTI crude oil price."""
     try:
-        r = requests.get(
-            "https://query1.finance.yahoo.com/v8/finance/chart/CL=F",
-            timeout=6, headers=_HEADERS
-        )
-        if r.status_code == 200:
+        r = _yahoo_retry(
+                 "https://query1.finance.yahoo.com/v8/finance/chart/CL=F",
+                timeout=15
+               )
+        if r and r.status_code == 200:
             result_list = r.json().get("chart", {}).get("result", [{}])
             meta = result_list[0].get("meta", {})
             price = meta.get("regularMarketPrice")
@@ -645,14 +684,11 @@ _AIF_PROMPTS = {
 def _call_llm_for_analysis(system_prompt: str, articles_list: list) -> Optional[str]:
     """Generate LLM analysis of news articles using Ollama."""
     global _config
-    if not _config or "omlx" not in (_config or {}):
+    if not _config or "ollama" not in (_config or {}):
         return None
 
-    omlx_url = _config.get("omlx", {}).get("url", "http://localhost:11434")
-    model = _config.get("omlx", {}).get("model", "Qwen3.6-35B-A3B-MLX-8bit")
-
-    # Build a concise prompt with article summaries
-    max_chars = 6000
+    ollama_url = _config.get("ollama", {}).get("url", "http://localhost:11434")
+    model = _config.get("ollama", {}).get("model", "qwen3.6:35b-a3b-mxfp8")
     combined = ""
     for i, art in enumerate(articles_list[:20]):
         title = (art.get("title", "") or "").strip()
@@ -682,7 +718,7 @@ def _call_llm_for_analysis(system_prompt: str, articles_list: list) -> Optional[
         req_headers = {"Content-Type": "application/json"}
         
         req = urllib.request.Request(
-            f"{omlx_url}/v1/chat/completions",
+            f"{ollama_url}/v1/chat/completions",
             data=req_data,
             headers=req_headers,
         )

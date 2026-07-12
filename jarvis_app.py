@@ -104,7 +104,7 @@ def _load_config():
 
         print("[CFG] Config load failed: %s" % e)
 
-        config = {"omlx": {"url": "http://localhost:11434", "model": "Qwen3.6-35B-A3B-MLX-8bit"}, "db_path": ":memory:"}
+        config = {"ollama": {"url": "http://localhost:11434", "model": "qwen3.6:35b-a3b-mxfp8"}, "db_path": ":memory:"}
 
 def _load_db():
 
@@ -364,9 +364,9 @@ def api_search():
 
         try:
 
-            omlx_url = config.get("omlx", {}).get("url", "http://localhost:11434")
+            ollama_url = config.get("ollama", {}).get("url", "http://localhost:11434")
 
-            model = config.get("omlx", {}).get("model", "qwen3.6:latest")
+            model = config.get("ollama", {}).get("model", "qwen3.6:latest")
 
             system_prompt = "Chuyen gia phan tich tai chinh Viet Nam."
 
@@ -388,7 +388,7 @@ def api_search():
 
             r = requests.post(
 
-                "%s/v1/chat/completions" % omlx_url,
+                "%s/v1/chat/completions" % ollama_url,
 
                 json={
 
@@ -1016,9 +1016,9 @@ def _generate_daily_evaluation(articles, cache_data):
 
     try:
 
-        omlx_url = (config or {}).get("omlx", {}).get("url", "http://localhost:11434")
+        ollama_url = (config or {}).get("ollama", {}).get("url", "http://localhost:11434")
 
-        model = (config or {}).get("omlx", {}).get("model", "Qwen3.6-35B-A3B-MLX-8bit")
+        model = (config or {}).get("ollama", {}).get("model", "qwen3.6:35b-a3b-mxfp8")
 
         # --- Build context from FRESH cache_data + fresh articles ---
 
@@ -1222,9 +1222,7 @@ def _generate_daily_evaluation(articles, cache_data):
 
         r = requests.post(
 
-            "%s/v1/chat/completions" % omlx_url,
-
-            json={
+             "%s/v1/chat/completions" % ollama_url,
 
                 "model": model,
 
@@ -1566,19 +1564,19 @@ def api_test():
 
 def api_health():
 
-    omlx_status = "unknown"
+    ollama_status = "unknown"
 
     try:
 
-        base_url = (config or {}).get("omlx", {}).get("url", "http://localhost:11434") if config else "http://localhost:11434"
+        base_url = (config or {}).get("ollama", {}).get("url", "http://localhost:11434") if config else "http://localhost:11434"
 
         r = requests.get(base_url + "/health", timeout=5)
 
-        omlx_status = "online" if r.status_code == 200 else "offline"
+        ollama_status = "online" if r.status_code == 200 else "offline"
 
     except Exception as e:
 
-        omlx_status = "error: %s" % str(e)[:40]
+        ollama_status = "error: %s" % str(e)[:40]
 
     db_path = (config or {}).get("db_path", "N/A") if config else "N/A"
 
@@ -1630,7 +1628,7 @@ def api_health():
 
              "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
 
-             "omlx": omlx_status,
+             "ollama": ollama_status,
 
              "db_path": db_path,
 

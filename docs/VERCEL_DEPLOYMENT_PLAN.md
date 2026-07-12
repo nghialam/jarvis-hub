@@ -14,7 +14,7 @@
 │  Access at:          │    ╔═════╧══════════╗   ╔════════════╦════╣
 │  jarvis-dashboard.vercel.app             │   ║ tunnel-agent║      ║
 ├──────────────────────┤   ┌────->║ cloudflared     │──────>|  localhost:8100
-│                      │   │      ╚══════════════╝    ║ Ollama/OMLX
+│                      │   │      ╚══════════════╝    ║ Ollama/Ollama
 │  Frontend            │   │                         ╚════════════╩────────┘
 │  (React/Vanilla JS)  │   │                               │
 │  served by Vercel    │   │                               ▼
@@ -183,7 +183,7 @@ These routes have no LLM dependency — fully deployable as serverless functions
 
 ### 6.2 AI-dependent endpoints (proxy to local Mac)
 
-These routes call Ollama/OMLX and MUST stay on the Mac Mini:
+These routes call Ollama/Ollama and MUST stay on the Mac Mini:
 
 | Route                                 | Proxied To                     |
 |----------------------------------------|------------------------------- |  
@@ -326,7 +326,7 @@ jarvis-hub/
 | Frontend           | Served by Flask app     | Static on Vercel CDN           | 
 | API endpoints      | All local Flask routes  | Split: non-AI → Vercel, AI → local Mac via tunnel | 
 | Database           | SQLite (jarvis.db)      | PostgreSQL (Supabase/Vercel Postgres free tier) |
-| LLM processing     | Local Ollama/OMLX       | Same — no change               |
+| LLM processing     | Local Ollama/Ollama       | Same — no change               |
 | News fetching      | RSS via Flask cron      | Vercel Cron Job or Serverless function  
 | Access             | localhost:8100 only     | jarvis-dashboard.vercel.app (global access)
 | Availability       | Mac must be on          | Dashboard always up; AI features degrade gracefully when local machine is offline | 

@@ -1,6 +1,6 @@
 # Jarvis Hub — Vietnamese Stock Market Intelligence Portal
 
-A Flask-based local web dashboard for Vietnamese stock market intelligence, combining real-time market data, news aggregation, LLM-powered summarization, and portfolio screening.
+A Flask-based local web dashboard for Vietnamese stock market intelligence, combining real-time market data, news aggregation, LLM-powered summarization, portfolio screening, and autonomous 6-hour Market Intelligence Agent.
 
 ## Features
 
@@ -11,6 +11,7 @@ A Flask-based local web dashboard for Vietnamese stock market intelligence, comb
 - **Portfolio Screening & Alerts** — Technical indicator calculations, watchlist management, alert system
 - **Knowledge Base Search** — Semantic search across stored knowledge base (SQLite)
 - **Telegram Delivery** — Automated daily briefings: market info, news aggregation, stock recommendations delivered to Telegram DM
+- **Market Intelligence Agent (NEW v2.0)** — Autonomous 6-hour cycle pipeline: ingests news → parses/cleans → LLM analyzes each article (summary + sentiment) → synthesizes Market Brief → delivers to DB + notifications
 
 ## Architecture
 
@@ -38,8 +39,9 @@ A Flask-based local web dashboard for Vietnamese stock market intelligence, comb
 | Backend | Flask (REST API, SQLite cache, background refresh threads) |
 | Data | vnstock3 / DNSE API (OHLCV), RSS feeders for news |
 | LLM | mlx-lm — Qwen3.6-35B-A3B-MLX-8bit (Apple Silicon native) |
-| Database | SQLite (`jarvis.db`, ~43 tables in Hub 2.0) |
+| Database | SQLite (`jarvis.db`, ~44 tables in Hub 2.0) |
 | Scheduling | APScheduler / threading background tasks |
+| **Market Intelligence** | **5-stage pipeline: ingest → parse → analyze → synthesize → deliver** |
 
 ## Quick Start
 
@@ -73,9 +75,9 @@ telegram:
   target_chat_id: "YOUR_CHAT_ID"
   openclaw_path: "/opt/homebrew/bin/openclaw"
 
-omlx:
+ollama:
   url: "http://localhost:11434"
-  model: "Qwen3.6-35B-A3B-MLX-8bit"
+  model: "qwen3.6:35b-a3b-mxfp8"
 
 feed:
   sources:
@@ -93,6 +95,7 @@ Integrated scheduled tasks (via Hermes Agent):
 | Daily News Aggregation | Weekdays 06:00 SGT | Scans RSS feeds, aggregates & summarizes Vietnamese market news |
 | Daily Market Information | Weekdays 06:00 SGT | Fetches VN indices, exchange rates, crypto, gold, oil data |
 | Daily Stock Recommendations | Weekdays 07:00 SGT | Screens stocks, generates buy/sell recommendations |
+| **Market Intelligence Agent** (NEW) | **Every 6h (06:00, 12:00, 18:00, 00:00)** | **Full pipeline: ingest → parse → LLM analyze → synthesize Market Brief → deliver to DB + notifications** |
 
 ## Project Structure
 
@@ -109,7 +112,12 @@ jarvis-hub/
 │   ├── llm_cache.py        # LLM result cache
 │   ├── market.py           # Market data (Yahoo Finance, exchange rates)
 │   ├── market_overview.py  # VN index aggregation
-│   └── ...                 # Signal analysis, evaluation modules
+│   └── market_intelligence/  # Market Intelligence Agent (NEW v2.0)
+│         ├── ingestion.py     # Stage 1: RSS/web scraper for last 6h
+│         ├── parsing.py       # Stage 2: HTML stripping, text cleaning
+│         ├── analyst.py       # Stage 3: LLM Analyst (summary + sentiment)
+│         ├── synthesizer.py   # Stage 4: LLM Strategist (Market Brief)
+│         └── delivery.py      # Stage 5: DB persistence + notification trigger
 ├── dashboard/              # Frontend (templates + static assets)
 ├── daily/                  # Daily briefing outputs
 ├── backups/                # DB & config backups

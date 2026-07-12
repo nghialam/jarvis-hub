@@ -1,3 +1,8 @@
 # Trading Bot Dependencies
 # Flask is optional - can use http.server if not installed
 flask
+
+# Market Intelligence Agent
+feedparser
+beautifulsoup4
+apscheduler

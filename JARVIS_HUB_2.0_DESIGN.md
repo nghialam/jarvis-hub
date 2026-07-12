@@ -1,12 +1,125 @@
 # Jarvis Hub 2.0 — Vietnamese Market Intelligence Portal
 
-## Design Specification v1.0 — 2026-06-21
+## Design Specification v2.0 — 2026-07-07
 
 ---
 
 ## 1. Overview
 
 **Jarvis Hub 2.0** is a web-based portal that aggregates Vietnamese stock market data, designed for financial professionals who need daily market tracking, news aggregation, and broker research analysis to make investment decisions based on real-time data and professional insights.
+
+### 1.0. Market Intelligence Agent (NEW — v2.0)
+
+A new autonomous agent system operating on a **6-hour cycle** that:
+- **Ingests** raw news from RSS feeds, web scrapers, and news APIs for the last 6 hours
+- **Parses** and cleans article content (strips HTML, removes boilerplate)
+- **Analyzes** each article with LLM: generates concise summaries (≤3 sentences), assigns sentiment (Bullish/Bearish/Neutral)
+- **Synthesizes** all article summaries into a cohesive "Market Brief" identifying major themes and trends
+- **Delivers** structured JSON output to the database, then triggers notifications (Telegram, dashboard)
+
+See **Section 1.6** for full architecture and pipeline details.
+
+### 1.6. Market Intelligence Agent Architecture (NEW)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│              MARKET INTELLIGENCE AGENT — 6-Hour Cycle            │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐       │
+│  │ STAGE 1      │    │ STAGE 2      │    │ STAGE 3      │       │
+│  │ INGESTION    │───▶│ PARSING      │───▶│ ANALYSIS     │       │
+│  │              │    │              │    │ (Analyst)    │       │
+│  │ • RSS feeds  │    │ • Strip HTML │    │ • Summarize  │       │
+│  │ • Web scrapers│   │ • Remove     │    │   per article│       │
+│  │ • News APIs  │    │   boilerplate│    │ • Sentiment  │       │
+│  │ • Last 6h    │    │ • Clean text │    │   classify   │       │
+│  └──────────────┘    └──────────────┘    └──────┬───────┘       │
+│                                                  │              │
+│                                          ┌───────▼───────┐      │
+│                                          │ STAGE 4      │      │
+│                                          │ SYNTHESIS    │      │
+│                                          │ (Strategist) │      │
+│                                          │              │      │
+│                                          │ • Identify   │      │
+│                                          │   major themes│     │
+│                                          │ • Detect     │      │
+│                                          │   trends     │      │
+│                                          │ • Generate   │      │
+│                                          │   Market Brief│     │
+│                                          └───────┬───────┘      │
+│                                                  │              │
+│                                          ┌───────▼───────┐      │
+│                                          │ STAGE 5      │      │
+│                                          │ DELIVERY     │      │
+│                                          │              │      │
+│                                          │ • Save JSON  │      │
+│                                          │   to DB      │      │
+│                                          │ • Trigger    │      │
+│                                          │   notifications│    │
+│                                          │   (Telegram, │      │
+│                                          │   dashboard) │      │
+│                                          └──────────────┘      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### 1.6.1. Stage Details
+
+| Stage | Component | File | Description |
+|---|---|---|---|
+| **Ingestion** | `core/market_intelligence/ingestion.py` | Fetches raw articles from RSS feeds, web scrapers, news APIs for the last 6 hours |
+| **Parsing** | `core/market_intelligence/parsing.py` | Strips HTML tags, removes boilerplate (ads, nav), cleans text for LLM consumption |
+| **Analysis** | `core/market_intelligence/analyst.py` | LLM-powered: generates ≤3 sentence summary per article, classifies sentiment (Bullish/Bearish/Neutral) |
+| **Synthesis** | `core/market_intelligence/synthesizer.py` | LLM-powered: aggregates all summaries into cohesive Market Brief with themes and trends |
+| **Delivery** | `core/market_intelligence/delivery.py` | Persists structured JSON to DB, triggers notification service (Telegram/webhook) |
+
+#### 1.6.2. Output Schema
+
+```json
+{
+    "articles": [
+        {
+            "title": "String",
+            "date": "String (ISO format)",
+            "url": "String",
+            "summary": "String (≤3 sentences)",
+            "sentiment": "String (Bullish|Bearish|Neutral)"
+        }
+    ],
+    "market_brief": "String (cohesive synthesis of all articles)",
+    "status": "Notification Ready"
+}
+```
+
+#### 1.6.3. Operational Constraints
+
+- **Accuracy:** No hallucination — if article impact unclear, mark sentiment as "Neutral" with note
+- **Format:** Valid parsable JSON output required
+- **Tone:** Objective, professional, analytical — no biased or emotional language
+- **Temporal Context:** Analysis based strictly on news from current 6-hour window
+- **Deterministic:** Every article input must be processed and represented before Market Brief generation
+
+#### 1.6.4. Trigger & Notification Flow
+
+```
+Pipeline Complete
+    │
+    ▼
+JSON saved to DB (market_intelligence table)
+    │
+    ▼
+status = "Notification Ready"
+    │
+    ├─▶ Telegram webhook → push summary to chat
+    ├─▶ Dashboard API → update /api/market-intelligence endpoint
+    └─▶ Activity log → record in activity_log table
+```
+
+#### 1.6.5. Scheduling
+
+- **Frequency:** Every 6 hours (06:00, 12:00, 18:00, 00:00 SGT)
+- **Implementation:** APScheduler cron job or Hermes Agent cron job
+- **Grace period:** If pipeline fails, retry once after 5 minutes; log failure to activity_log
 
 ### 1.1. Objectives
 
@@ -79,6 +192,7 @@
 | Data Layer | SQLite + vnstock3 / DNSE API | Historical data storage, OHLCV, news |
 | Background Jobs | APScheduler / Threading | Auto-refresh market data 300s, news 60m |
 | LLM Integration | mlx-lm (qwen3.6-35b-a3b-mlx-8bit) | News summarization, insights, relevance scoring, entity extraction |
+| **Market Intelligence Agent** | **Python pipeline + LLM** | **6-hour cycle: ingest → parse → analyze → synthesize → deliver** |
 
 ---
 
@@ -250,12 +364,12 @@
 │  │  EVENTS / KEY NEWS (High-impact company news)              │ │
 │  │                                                             │ │
 │  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │ │
-│  │  │ ACB          │  │ VHM          │  │ FPT          │     │ │
-│  │  │ ↑ Dividend   │  │ ↓ Buyback    │  │ ↑ Earnings   │     │ │
-│  │  │ 15,000đ/sh   │  │ 2M shares    │  │ Q2 revenue   │     │ │
-│  │  │ 2h ago       │  │ 5h ago       │  │ ↑18% YoY     │     │ │
-│  │  │ [Detail →]   │  │ [Detail →]   │  │ [Detail →]   │     │ │
-│  │  └──────────────┘  └──────────────┘  └──────────────┘     │ │
+│  │  │ ACB          │  │ VHM          │  │ FPT          │     │
+│  │  │ ↑ Dividend   │  │ ↓ Buyback    │  │ ↑ Earnings   │     │
+│  │  │ 15,000đ/sh   │  │ 2M shares    │  │ Q2 revenue   │     │
+│  │  │ 2h ago       │  │ 5h ago       │  │ ↑18% YoY     │     │
+│  │  │ [Detail →]   │  │ [Detail →]   │  │ [Detail →]   │     │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘     │
 │  └────────────────────────────────────────────────────────────┘ │
 │                                                                  │
 │  ┌────────────────────────────────────────────────────────────┐ │
@@ -565,6 +679,68 @@
 └────────────────────────────────────────────────────────┘
 ```
 
+### 4.4. Market Intelligence Pipeline (NEW — v2.0)
+
+```
+┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+│ RSS feeds      │ │ Web scrapers   │ │ News APIs     │
+│ (Cafef,        │ │ (Vietstock,    │ │ (Reuters,     │
+│  VnExpress,    │ │  BBC, etc.)    │ │  CNBC, etc.) │
+│  Reuters)      │ │               │ │                │
+└──────┬───────┘ └──────┬───────┘ └──────┬───────┘
+         │                   │                   │
+         ▼                   ▼                   ▼
+┌────────────────────────────────────────────────┐
+│  STAGE 1: INGESTION (ingestion.py)              │
+│     • Fetch articles from last 6 hours          │
+│     • Deduplicate by URL/content hash           │
+│     • Store raw articles temporarily            │
+└──────────────────────┬─────────────────────────┘
+                         │
+                         ▼
+┌────────────────────────────────────────────────┐
+│  STAGE 2: PARSING (parsing.py)                  │
+│     • Strip HTML tags                           │
+│     • Remove boilerplate (ads, nav, footers)    │
+│     • Clean text for LLM consumption            │
+└──────────────────────┬─────────────────────────┘
+                         │
+                         ▼
+┌────────────────────────────────────────────────┐
+│  STAGE 3: ANALYSIS — Analyst Agent (analyst.py)│
+│     • For each article:                          │
+│       - Generate ≤3 sentence summary             │
+│       - Classify sentiment (Bullish/Bearish/Neutral)│
+│     • Output: structured JSON per article        │
+└──────────────────────┬─────────────────────────┘
+                         │
+                         ▼
+┌────────────────────────────────────────────────┐
+│  STAGE 4: SYNTHESIS — Strategist Agent           │
+│            (synthesizer.py)                        │
+│     • Aggregate all article summaries             │
+│     • Identify major themes & trends              │
+│     • Generate cohesive Market Brief              │
+└──────────────────────┬─────────────────────────┘
+                         │
+                         ▼
+┌────────────────────────────────────────────────┐
+│  STAGE 5: DELIVERY (delivery.py)                 │
+│     • Save structured JSON to DB                  │
+│     • Set status = "Notification Ready"           │
+│     • Trigger notifications (Telegram, dashboard)│
+└────────────────────────────────────────────────┘
+                         │
+                         ▼
+┌────────────────────────────────────────────────┐
+│  Flask API Endpoints                              │
+│  POST /api/market-intelligence/run                │
+│  GET    /api/market-intelligence/latest           │
+│  GET    /api/market-intelligence/history          │
+│  GET    /api/market-intelligence/sentiment-dist   │
+└────────────────────────────────────────────────┘
+```
+
 ---
 
 ## 5. Database Schema
@@ -685,6 +861,35 @@ CREATE TABLE alerts (
 );
 ```
 
+### 5.7. market_intelligence (NEW — v2.0)
+
+```sql
+CREATE TABLE IF NOT EXISTS market_intelligence (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_date        TEXT    NOT NULL,             -- ISO date of the 6-hour run
+    run_period      TEXT    NOT NULL,             -- 'morning' | 'afternoon' | 'evening' | 'night'
+    articles_json   TEXT    NOT NULL,             -- JSON array of article objects
+    market_brief    TEXT    NOT NULL,             -- synthesized Market Brief text
+    status          TEXT    DEFAULT 'Notification Ready',
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(run_date, run_period)
+);
+
+-- Article JSON structure:
+-- [
+--   {
+--     "title": "String",
+--     "date": "String (ISO format)",
+--     "url": "String",
+--     "summary": "String (≤3 sentences)",
+--     "sentiment": "String (Bullish|Bearish|Neutral)"
+--   }
+-- ]
+
+CREATE INDEX IF NOT EXISTS idx_mi_run_date ON market_intelligence(run_date);
+CREATE INDEX IF NOT EXISTS idx_mi_status ON market_intelligence(status);
+```
+
 ---
 
 ## 6. API Design
@@ -735,6 +940,47 @@ CREATE TABLE alerts (
 | POST | `/api/v1/alerts` | Create new alert |
 | PATCH | `/api/v1/alerts/{id}` | Update alert |
 | DELETE | `/api/v1/alerts/{id}` | Delete alert |
+
+### 6.5. Market Intelligence API (NEW — v2.0)
+
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/v1/market-intelligence/run` | Trigger a new 6-hour cycle pipeline run |
+| GET | `/api/v1/market-intelligence/latest` | Get the most recent Market Brief + articles |
+| GET | `/api/v1/market-intelligence/history` | List past intelligence runs with filters |
+| GET | `/api/v1/market-intelligence/{id}` | Get specific run detail (articles + brief) |
+| GET | `/api/v1/market-intelligence/sentiment-dist` | Sentiment distribution summary (Bullish/Bearish/Neutral counts) |
+| DELETE | `/api/v1/market-intelligence/{id}` | Delete a specific run (cleanup) |
+
+**POST /api/v1/market-intelligence/run Response:**
+```json
+{
+     "status": "started",
+     "run_id": 42,
+     "message": "Pipeline started — will complete in ~2-5 minutes"
+}
+```
+
+**GET /api/v1/market-intelligence/latest Response:**
+```json
+{
+     "id": 42,
+     "run_date": "2026-07-07",
+     "run_period": "morning",
+     "articles": [
+         {
+             "title": "...",
+             "date": "2026-07-07T08:30:00",
+             "url": "...",
+             "summary": "...",
+             "sentiment": "Bullish"
+         }
+     ],
+     "market_brief": "...",
+     "status": "Notification Ready",
+     "created_at": "2026-07-07T09:15:00"
+}
+```
 
 ---
 
@@ -854,6 +1100,45 @@ def check_alerts():
             mark_alert_triggered(alert)
 ```
 
+### 8.5. Market Intelligence Agent (NEW — v2.0)
+
+```python
+# Scheduled every 6 hours (06:00, 12:00, 18:00, 00:00 SGT)
+def run_market_intelligence_pipeline():
+    """Execute the full 5-stage Market Intelligence pipeline."""
+    period = determine_period()  # 'morning' | 'afternoon' | 'evening' | 'night'
+    
+    # Stage 1: Ingestion
+    raw_articles = ingest_from_sources(hours_back=6)
+    
+    # Stage 2: Parsing
+    cleaned_articles = parse_and_clean(raw_articles)
+    
+    # Stage 3: Analysis (Analyst Agent)
+    analyzed_articles = []
+    for article in cleaned_articles:
+        result = analyst_agent.analyze(article)  # summary + sentiment
+        analyzed_articles.append(result)
+    
+    # Stage 4: Synthesis (Strategist Agent)
+    market_brief = synthesizer_agent.synthesize(analyzed_articles)
+    
+    # Stage 5: Delivery
+    run_id = delivery_service.save_to_db(
+        run_date=datetime.now().isoformat(),
+        run_period=period,
+        articles_json=json.dumps(analyzed_articles),
+        market_brief=market_brief,
+        status="Notification Ready"
+    )
+    
+    # Trigger notifications
+    delivery_service.notify_telegram(run_id)
+    delivery_service.update_dashboard(run_id)
+    
+    return {"run_id": run_id, "status": "complete"}
+```
+
 ---
 
 ## 9. Implementation Phases
@@ -912,6 +1197,20 @@ def check_alerts():
 - [ ] Documentation
 - [ ] Deploy to production (replace 1.0 on port 8100)
 
+### Phase 7: Market Intelligence Agent (Weeks 13-14 — NEW v2.0)
+
+- [ ] Create `core/market_intelligence/` module with 5 stage files
+- [ ] Stage 1: Ingestion — RSS/web scraper for last 6 hours of news
+- [ ] Stage 2: Parsing — HTML stripping, boilerplate removal, text cleaning
+- [ ] Stage 3: Analysis — LLM Analyst Agent (summary + sentiment per article)
+- [ ] Stage 4: Synthesis — LLM Strategist Agent (Market Brief from all summaries)
+- [ ] Stage 5: Delivery — DB persistence + notification trigger (Telegram/dashboard)
+- [ ] Create `market_intelligence` database table with schema
+- [ ] Add API endpoints: POST /run, GET /latest, GET /history, GET /sentiment-dist
+- [ ] Configure APScheduler cron job (every 6 hours: 06:00, 12:00, 18:00, 00:00 SGT)
+- [ ] Add Market Intelligence tab to frontend dashboard
+- [ ] Test full pipeline end-to-end with real news data
+
 ---
 
 ## 10. LLM Integration — mlx-lm (qwen3.6-35b-a3b-mlx-8bit)
@@ -948,11 +1247,11 @@ def get_model():
     global _model, _tokenizer
     if _model is None:
         from mlx_lm import load, generate, stream_generate
-        _model, _tokenizer = load("unsloth/Qwen3.6-35B-A3B-MLX-8bit")
+        _model, _tokenizer = load("unsloth/qwen3.6:35b-a3b-mxfp8")
     return _model, _tokenizer
 ```
 
-**Model available:** `unsloth/Qwen3.6-35B-A3B-MLX-8bit` (35B params, 8-bit quantized, ~21 GB)
+**Model available:** `unsloth/qwen3.6:35b-a3b-mxfp8` (35B params, 8-bit quantized, ~21 GB)
 - Architecture: Qwen3.5-35B-A3B (Mixture of Experts — 35B total, ~3B active per token)
 - Format: MLX safetensors from HF Hub
 - Quantization: 8-bit (better than 4-bit for accuracy, still fits 64 GB RAM)
@@ -1101,10 +1400,10 @@ Report: {text[:4000]}
 
 ```python
 def build_consensus(reports: list) -> dict:
-    """Compare all broker reports and build consensus view"""
+     """Compare all broker reports and build consensus view"""
     report_texts = "\n\n---\n\n".join([
         f"[{r['broker']}]\n{r['summary']}" for r in reports
-    ])
+     ])
 
     prompt = f"""Compare these broker reports for Vietnam stock market:
 
@@ -1122,54 +1421,62 @@ Return JSON.
     return json.loads(result)
 ```
 
-### 10.6. Performance Optimization
-
-| Technique | Implementation | Impact |
-|---|---|---|
-| **Model caching** | Singleton pattern, load ONCE at startup | No reload overhead |
-| **Batch processing** | Group news articles, process in batch | 3-5x throughput |
-| **Seeded generation** | `seed=42` for reproducibility | Deterministic output |
-| **Lower temp** | `temp=0.5` for scoring/classification | More consistent results |
-| **Streaming** | `stream_generate()` for long reports | Perceived latency ↓ |
-| **Prompt caching** | Cache common prompt templates | Token usage ↓ |
-| **4-bit quantized** | ❌ Not using 4-bit — using 8-bit (qwen3.6-35b-a3b-mlx-8bit) | 8-bit better for scoring accuracy |
-| **Metal GPU** | MLX uses Apple GPU automatically | 10-20x faster than CPU |
-
-### 10.7. Memory Considerations (64 GB Mac)
-
-```
-Model loaded in mlx-lm (qwen3.6-35b-a3b-mlx-8bit):
-├── Qwen3.6-35B-A3B-MLX-8bit: ~21 GB (GPU/Metal)
-│   ├── 35B total params (MoE architecture)
-│   └── ~3B active params/token (fast inference)
-├── KV cache (context): ~2-4 GB
-├── Flask app + data: ~1-2 GB
-├── vnstock3 + scrapers: ~1 GB
-└── macOS system: ~15 GB
-Total: ~40-43 GB (safe headroom ~21 GB)
-```
-
-**Preferring 8-bit over 4-bit:**
-- Significantly higher accuracy for scoring/classification tasks
-- Still fits comfortably in 64 GB RAM
-- 35B total / 3B active → inference speed close to 4-bit
-- Quantization: per-channel 8-bit from Unsloth (good optimization)
-
-Additional considerations:
-- Model auto-eviction when memory pressure detected
-- Batch size limited by available memory
-- Streaming mode preferred for >1024 tokens
-
-### 10.8. Fallback Strategy
+#### F. Market Intelligence — Analyst Agent (NEW — v2.0)
 
 ```python
-def safe_llm_call(prompt: str, fallback_text: str = None) -> str:
-    """Try mlx-lm, fallback to cached response on error"""
-    try:
-        return chat_completion([{"role": "user", "content": prompt}])
-    except Exception as e:
-        logger.warning(f"mlx-lm call failed: {e}, using fallback")
-        return fallback_text or "LLM unavailable - using heuristic scoring"
+def analyze_article(title: str, date: str, content: str, url: str) -> dict:
+     """Generate summary + sentiment for a single article."""
+    prompt = f"""You are a Lead Market Intelligence Agent. Analyze this financial news article.
+
+Title: {title}
+Date: {date}
+URL: {url}
+Content: {content[:3000]}
+
+Return ONLY valid JSON (no markdown, no explanation):
+{{
+   "title": "{title}",
+   "date": "{date}",
+   "url": "{url}",
+   "summary": "Concise summary in 1-3 sentences. Professional tone.",
+   "sentiment": "Bullish" | "Bearish" | "Neutral"
+}}
+
+Rules:
+- If impact is unclear, mark sentiment as "Neutral" with note "Insufficient information to determine sentiment."
+- Maintain strict factual accuracy — do not hallucinate data.
+"""
+    result = chat_completion([{"role": "user", "content": prompt}], max_tokens=512)
+    return json.loads(result)
+```
+
+#### G. Market Intelligence — Strategist Agent (NEW — v2.0)
+
+```python
+def synthesize_market_brief(analyzed_articles: list) -> str:
+     """Aggregate all article summaries into a cohesive Market Brief."""
+    summaries = "\n\n---\n\n".join([
+        f"[{a['sentiment']}] {a['title']}: {a['summary']}"
+        for a in analyzed_articles
+    ])
+
+    prompt = f"""You are the Lead Market Intelligence Agent. Synthesize the following
+analyzed article summaries into a cohesive Market Brief for the past 6 hours.
+
+Identify:
+1. Major themes and trends across all articles
+2. Conflicting reports or divergent signals
+3. Overall market status assessment
+4. Strategic outlook for the upcoming period
+
+Articles:
+{summaries}
+
+Return ONLY the Market Brief text (5-10 sentences, professional tone).
+Do NOT include JSON — just the narrative brief.
+"""
+    result = chat_completion([{"role": "user", "content": prompt}], max_tokens=1024)
+    return result.strip()
 ```
 
 ---
@@ -1182,7 +1489,7 @@ def safe_llm_call(prompt: str, fallback_text: str = None) -> str:
 |---|---|---|
 | Flask app | jarvis-hub/ (port 8100) | jarvis-hub/ (port 8100) — **replace 1.0** |
 | Database | jarvis.db | jarvis.db (upgrade — keep DB, add new tables) |
-| omlx/mlx-lm | qwen3.6-35b-a3b-mlx-8bit loaded | qwen3.6-35b-a3b-mlx-8bit (shared) |
+| ollama/mlx-lm | qwen3.6-35b-a3b-mlx-8bit loaded | qwen3.6-35b-a3b-mlx-8bit (shared) |
 | vnstock3 | installed | installed (shared) |
 | Background jobs | APScheduler | APScheduler (extended) |
 
@@ -1210,96 +1517,10 @@ jarvis-hub/
 │   │   └── summarizer.py    # LLM summarization
 │   └── alerts/              # Alert system
 │       ├── monitor.py       # Alert checking
-│       └── notifier.py      # Telegram/email notifications
-├── templates/
-│   └── index.html           # Main dashboard page
-├── static/
-│   ├── css/
-│   │   └── style.css        # Dark theme styles
-│   ├── js/
-│   │   ├── app.js           # Main app logic
-│   │   ├── market.js        # Market tab JS
-│   │   ├── news.js          # News tab JS
-│   │   ├── company.js       # Company news tab JS
-│   │   ├── reports.js       # Reports tab JS
-│   │   └── screener.js      # Screener tab JS
-│   └── charts/              # Chart configurations
-├── data/
-│   ├── pdfs/                # Stored research PDFs
-│   └── cache/               # Temporary caches
-└── requirements.txt         # Dependencies
-```
-
----
-
-## 12. Security & Reliability
-
-### 12.1. Rate Limiting
-
-- All API endpoints: 60 req/min per client (Flask-Limiter)
-- News scraping: stagger requests (1-2s delay between sources)
-- Report crawling: max 1 concurrent request per broker
-
-### 12.2. Error Handling
-
-- Graceful degradation: if one data source fails, show partial data with warning
-- Retry logic: 3 attempts with exponential backoff for API calls
-- Fallback data: cache last successful fetch, serve stale data if fetch fails
-- Health check: `GET /api/health` returns status of all data sources
-
-### 12.3. Data Freshness Indicators
-
-Every tab shows last update time prominently:
-```
-Last updated: 14:32 (2 min ago)
-```
-Color-coded:
-- 🟢 Green: < 10 minutes old
-- 🟡 Yellow: 10-30 minutes old
-- 🔴 Red: > 30 minutes old (data may be stale)
-
----
-
-## 13. Performance Targets
-
-| Metric | Target |
-|---|---|
-| Page load time | < 2 seconds (cached) |
-| Chart render time | < 500ms |
-| API response time | < 200ms (cached) |
-| Market data refresh | Every 300s, < 10s per cycle |
-| News fetch cycle | Every 60m, < 2m total |
-| Concurrent users | Support 10+ simultaneous users |
-| Memory usage | < 2 GB with all data loaded |
-
----
-
-## 14. Future Enhancements (Post-v1)
-
-- **LLM Chat Interface:** Ask questions about market data in natural language ("Show me best performing sectors this week")
-- **Portfolio Tracker:** User portfolio with P&L tracking
-- **Economic Calendar:** Key macro events (CPI, FOMC, rate decisions)
-- **Technical Analysis Panel:** RSI, MACD, Bollinger Bands charts
-- **Export & Share:** PDF export of dashboards, shareable links
-- **Multi-language:** Vietnamese + English toggle
-- **Mobile Responsive:** Basic mobile support for on-the-go checks
-
----
-
-## 15. Dependencies
-
-```
-flask==3.0.0
-flask-limiter==3.5.0
-requests==2.31.0
-beautifulsoup4==4.12.3
-feedparser==6.0.10
-apscheduler==3.10.4
-mlx-lm==0.23.0
-mlx==0.23.0
-transformers==4.48.0
-```
-
----
-
-*Document v1.0 — 2026-06-21 — Jarvis Hub 2.0 Design Specification*
+│        └── notifier.py            # Telegram/email notifications
+│        └── market_intelligence/    # Market Intelligence Agent (NEW — v2.0)
+│              ├── ingestion.py       # Stage 1: RSS/web scraper for last 6h
+│              ├── parsing.py         # Stage 2: HTML stripping, text cleaning
+│              ├── analyst.py         # Stage 3: LLM Analyst (summary + sentiment)
+│              ├── synthesizer.py     # Stage 4: LLM Strategist (Market Brief)
+│              └── delivery.py        # Stage 5: DB persistence + notification trigger

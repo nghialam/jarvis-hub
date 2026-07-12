@@ -54,12 +54,12 @@ def phase_1_health_check():
     else:
         checks["flask_8100"] = "unreachable"
 
-    # OMLX model server check
+    # OLLAMA model server check
     r = run_cmd("curl -s --max-time 3 http://localhost:11434/health")
     if r.get("exit") == 0 and "healthy" in r.get("out", ""):
-        checks["omlx"] = "loaded"
+        checks["ollama"] = "loaded"
     else:
-        checks["omlx"] = "not loaded"
+        checks["ollama"] = "not loaded"
 
     # SQLite DB integrity check
     db_path = "/Users/nghialam/.jarvis-hub-knowledge.db"

@@ -130,11 +130,11 @@ def store_reports(reports: list, db=None) -> int:
 def generate_llm_summary(title: str) -> str:
     """Generate a brief summary using LLM. Falls back to title if LLM fails."""
     try:
-        omlx_url = __import__("core.config", fromlist=["load_config"]).load_config().get("omlx", {}).get("url", "http://localhost:11434")
+        ollama_url = __import__("core.config", fromlist=["load_config"]).load_config().get("ollama", {}).get("url", "http://localhost:11434")
         resp = requests.post(
-            f"{omlx_url}/v1/chat/completions",
+            f"{ollama_url}/v1/chat/completions",
             json={
-                "model": "Qwen3.6-35B-A3B-MLX-8bit",
+                 "model": "qwen3.6:35b-a3b-mxfp8",
                 "messages": [
                     {"role": "system", "content": "Generate a 1-line Vietnamese summary of this brokerage report title. Keep it under 80 chars."},
                     {"role": "user", "content": f"Report title: {title}"},

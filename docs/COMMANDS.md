@@ -159,7 +159,7 @@ python cli.py doctor
 ```
 
 **Checks:**
-- ✅ Config file loading & OMLX/Ollama endpoint
+- ✅ Config file loading & Ollama/Ollama endpoint
 - ✅ Database connectivity (jarvis.db) + KB entry count
 - ✅ RSS source reachability (with priority-prioritized status per feed)
 - ✅ Model availability
@@ -205,9 +205,9 @@ system:
 telegram:
   target_chat_id: "1670013239"       # Telegram delivery channel
 
-omlx:
+ollama:
   url: "http://localhost:11434"     # Ollama endpoint
-  model: "Qwen3.6-35B-A3B-MLX-8bit" # Default LLM model
+  model: "qwen3.6:35b-a3b-mxfp8" # Default LLM model
   api_key: ""                       # If needed
 
 feed:

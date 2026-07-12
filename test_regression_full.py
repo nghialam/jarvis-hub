@@ -43,7 +43,7 @@ class TestConfig(unittest.TestCase):
 
     def test_dot_notation_access_existing(self):
         cfg = load_config()
-        ollama_url = get('ollama.url', None) or cfg.get('omlx', {}).get('url')
+        ollama_url = get('ollama.url', None) or cfg.get('ollama', {}).get('url')
         self.assertIsNotNone(ollama_url, "Ollama URL must be configured")
         self.assertIn('11434', str(ollama_url))
 
@@ -69,8 +69,8 @@ class TestConfig(unittest.TestCase):
 
     def test_config_defaults_applied(self):
         cfg = load_config()
-        ollama = cfg.get('omlx', {})
-        if 'url' not in cfg.get('omlx', {}):
+        ollama = cfg.get('ollama', {})
+        if 'url' not in cfg.get('ollama', {}):
             self.assertEqual(ollama['url'], 'http://localhost:11434')
 
 

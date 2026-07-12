@@ -24,7 +24,7 @@ Health check with system status overview.
 {
     "status": "ok",
     "timestamp": "YYYY-MM-DD HH:MM",
-    "omlx": "online" | "offline" | "error: ...",
+    "ollama": "online" | "offline" | "error: ...",
     "db_path": "/path/to/jarvis.db",
     "indices": { "VN-Index": { "price": 1798.61, "change_pct": -0.28, ... } },
     "rates": { "USD": { "cash": 261.0, "transfer": 261.3, "sell": 264.1 }},
@@ -332,4 +332,107 @@ Trigger automated scan of watchlist for trading signals.
     },
     "success": true
 }
+```
+
+---
+
+## 13. Market Intelligence Agent (NEW — v2.0)
+
+### POST /api/market-intelligence/run
+Trigger a new 6-hour cycle pipeline run.
+
+**Body (JSON):** Optional `{"force": true}` to force re-ingestion even if recent run exists.
+
+**Response:**
+```json
+{
+     "status": "started",
+     "run_id": 42,
+     "message": "Pipeline started — will complete in ~2-5 minutes"
+}
+```
+
+### GET /api/market-intelligence/latest
+Get the most recent Market Brief + articles.
+
+**Response:**
+```json
+{
+     "id": 42,
+     "run_date": "2026-07-07",
+     "run_period": "morning",
+     "articles": [
+         {
+             "title": "...",
+             "date": "2026-07-07T08:30:00",
+             "url": "...",
+             "summary": "...",
+             "sentiment": "Bullish"
+         }
+     ],
+     "market_brief": "...",
+     "status": "Notification Ready",
+     "created_at": "2026-07-07T09:15:00"
+}
+```
+
+### GET /api/market-intelligence/history
+List past intelligence runs with filters.
+
+**Parameters:**
+- `limit` (optional, default 10): Max number of runs to return
+- `period` (optional): Filter by period (`morning`, `afternoon`, `evening`, `night`)
+- `sentiment_filter` (optional): Filter by dominant sentiment (`Bullish`, `Bearish`, `Neutral`)
+
+**Response:**
+```json
+{
+     "count": 5,
+     "runs": [
+         {
+             "id": 42,
+             "run_date": "2026-07-07",
+             "run_period": "morning",
+             "article_count": 18,
+             "dominant_sentiment": "Bullish",
+             "brief_preview": "Markets showed strong bullish momentum...",
+             "created_at": "2026-07-07T09:15:00"
+         }
+     ]
+}
+```
+
+### GET /api/market-intelligence/{id}
+Get specific run detail (articles + brief).
+
+**Parameters:**
+- `:id` (URL segment): Run ID from history
+
+**Response:** Same as `/latest` but for the specified run ID.
+
+### GET /api/market-intelligence/sentiment-dist
+Sentiment distribution summary.
+
+**Response:**
+```json
+{
+     "total_articles": 45,
+     "distribution": {
+         "Bullish": 22,
+         "Bearish": 12,
+         "Neutral": 11
+     },
+     "trend": "bullish"
+}
+```
+
+### DELETE /api/market-intelligence/{id}
+Delete a specific run (cleanup).
+
+**Parameters:**
+- `:id` (URL segment): Run ID to delete
+
+**Response:**
+```json
+{ "status": "deleted", "run_id": 42 }
 ```

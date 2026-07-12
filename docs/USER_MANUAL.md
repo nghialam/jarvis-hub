@@ -212,8 +212,8 @@ All settings in `~/jarvis-hub/config.yaml`:
 |---------|-----|----------|
 | `system` | timezone | Defaults to Asia/Saigon (GMT+7) |
 | `telegram` | target_chat_id | Telegram delivery channel (1670013239) |
-| `omlx` | url | Ollama endpoint — default: http://localhost:11434 |
-| `omlx` | model | LLM model name — default: Qwen3.6-35B-A3B-MLX-8bit |
+| `ollama` | url | Ollama endpoint — default: http://localhost:11434 |
+| `ollama` | model | LLM model name — default: qwen3.6:35b-a3b-mxfp8 |
 | `feed.sources[].priority` | 1 / 2 / 3 / 4 | Lower number = higher priority in news feed display |
 | `exchange_rates_source` | vietcombank/sacombank | Which bank's rates to use |
 | `schedule.morning_briefing` | "06:18" | Morning briefing time (GMT+7) |

@@ -32,7 +32,7 @@ try:
     health = resp.get_json()
     if resp.status_code == 200:
         print(f"\n✅ /api/health -> {resp.status_code}")
-        print(f"   Ollama: {health.get('omlx', 'unknown')}")
+        print(f"   Ollama: {health.get('ollama', 'unknown')}")
         print(f"   DB: {health.get('db_path', 'N/A')}")
     else:
         print(f"\n❌ /api/health FAILED: {resp.status_code}")

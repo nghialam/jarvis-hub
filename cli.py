@@ -11,6 +11,7 @@ commands:
     jarvis history        - Compare daily snapshots
     jarvis doctor         - System health check
 """
+import json
 import random
 import sys
 import time
@@ -335,11 +336,11 @@ def search(query):
         suggestion_prompt = "Explain the financial concept '{}' in Vietnamese, under 200 words. Include definition, examples, and related concepts.".format(query)
         try:
             config = cfg_module.load_config()
-            omlx_url = config.get("omlx", {}).get("url", "http://localhost:11434")
-            model = config.get("omlx", {}).get("model", "qwen3.6:latest")
+            ollama_url = config.get("ollama", {}).get("url", "http://localhost:11434")
+            model = config.get("ollama", {}).get("model", "qwen3.6:latest")
 
             response = requests.post(
-                 "{} /v1/chat/completions".format(omlx_url),
+                  "{} /v1/chat/completions".format(ollama_url),
                 json={
                      "model": model,
                      "messages": [
@@ -506,10 +507,10 @@ def doctor():
         config = cfg_module.load_config()
         click.echo("\u2705 Config loaded successfully")
 
-        omlx_url = config.get("omlx", {}).get("url", "http://localhost:11434")
-        omlx_model = config.get("omlx", {}).get("model", "qwen3.6:latest")
-        click.echo("  OMLX endpoint:    {}".format(omlx_url))
-        click.echo("  Model:               {}".format(omlx_model))
+        ollama_url = config.get("ollama", {}).get("url", "http://localhost:11434")
+        ollama_model = config.get("ollama", {}).get("model", "qwen3.6:latest")
+        click.echo("  Ollama endpoint:    {}".format(ollama_url))
+        click.echo("  Model:              {}".format(ollama_model))
     except Exception as e:
         click.echo("! Could not load config: {}".format(e))
 
@@ -525,25 +526,25 @@ def doctor():
     except Exception as e:
         click.echo("! Database error: {}".format(e))
 
-    # Check OMLX connectivity
+     # Check Ollama connectivity
     try:
-        r = requests.get("{} /v1/models".format(omlx_url), timeout=5)
+        r = requests.get("{} /v1/models".format(ollama_url), timeout=5)
 
         if r.status_code == 200:
             models = r.json().get("models", [])
             model_names = [m.get("name", "") for m in models]
 
-            base_model = omlx_model.split(":")[0]
+            base_model = ollama_model.split(":")[0]
             if base_model in " ".join(model_names):
-                click.echo("✅ OMLX running - {} models available".format(len(models)))
+                click.echo("✅ Ollama running - {} models available".format(len(models)))
             else:
                 click.echo("! Model '{}' not found. Available: {}".format(
-                    omlx_model, ", ".join(model_names[:5])))
+                    ollama_model, ", ".join(model_names[:5])))
         else:
-            click.echo("- OMLX endpoint returned status {}".format(r.status_code))
+            click.echo("- OLLAMA endpoint returned status {}".format(r.status_code))
 
     except Exception as e:
-        click.echo("! Could not connect to OMLX: {}".format(e))
+        click.echo("! Could not connect to OLLAMA: {}".format(e))
 
     # Check RSS sources
     try:
@@ -564,7 +565,83 @@ def doctor():
         click.echo("\u2705 Database file: {} ({} KB)".format(db_path, round(db_size, 1)))
 
 
-# --- Main entry point -----------------------------------------------
+# --- MARKET INTELLIGENCE ----------------------------------------------------
 
-if __name__ == "__main__":
-    cli()
+@cli.command("market-intelligence")
+@click.option("--run", is_flag=True, help="Run the Market Intelligence pipeline immediately")
+@click.option("--latest", is_flag=True, help="Show the latest intelligence brief")
+@click.option("--history", is_flag=True, help="Show recent intelligence runs")
+def market_intelligence(run, latest, history):
+    """Run or query the Market Intelligence Agent pipeline."""
+    try:
+        from core.market_intelligence import run_pipeline, determine_period
+        from datetime import date
+    except ImportError:
+        click.echo("! Market Intelligence module not found. Ensure core/market_intelligence/ exists.")
+        return
+
+    if run:
+        click.echo("=== RUNNING MARKET INTELLIGENCE PIPELINE ===")
+        click.echo("Time: {}".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        period = determine_period()
+        click.echo("Period: {}\n".format(period))
+
+        try:
+            result = run_pipeline()
+            click.echo("\n=== PIPELINE RESULT ===")
+            click.echo(json.dumps(result, indent=2, default=str))
+        except Exception as e:
+            click.echo("! Pipeline failed: {}".format(e))
+            import traceback
+            click.echo(traceback.format_exc())
+        return
+
+    if latest or history:
+        db = Database()
+        if not hasattr(db, "get_latest_market_intelligence"):
+            click.echo("! Market Intelligence DB methods not available.")
+            return
+
+        if latest:
+            data = db.get_latest_market_intelligence()
+            if not data:
+                click.echo("- No intelligence runs found.")
+                return
+            click.echo("=== LATEST INTELLIGENCE ===")
+            click.echo("Run ID:       {}".format(data.get("id")))
+            click.echo("Date:         {}".format(data.get("run_date")))
+            click.echo("Period:       {}".format(data.get("run_period")))
+            click.echo("Status:       {}\n".format(data.get("status")))
+            brief = data.get("market_brief", "")
+            if len(brief) > 1000:
+                brief = brief[:1000] + "..."
+            click.echo(brief)
+
+        if history:
+            runs = db.get_market_intelligence_history(limit=10)
+            if not runs:
+                click.echo("- No intelligence runs found.")
+                return
+            click.echo("=== RECENT INTELLIGENCE RUNS ===\n")
+            for r in runs:
+                status_icon = STATUS_EMOJI.get("ok" if "error" not in (r.get("status") or "").lower() else "warn", "?")
+                click.echo("{} {} | {} | {}".format(
+                    status_icon,
+                    r.get("run_date"),
+                    r.get("run_period"),
+                    r.get("status", "unknown")
+                 ))
+
+        return
+
+    # No flags: show help
+    click.echo("""Market Intelligence Agent - Autonomous 5-stage pipeline
+
+Usage:
+  jarvis market-intelligence --run          Run pipeline immediately
+  jarvis market-intelligence --latest       Show latest brief
+  jarvis market-intelligence --history      Show recent runs
+
+The pipeline runs automatically every 6 hours at 06:00, 12:00, 18:00, 00:00 SGT.
+""")
+

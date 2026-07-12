@@ -40,8 +40,8 @@ def _ensure_imports():
 BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "signals.db"
-OMLX_URL = os.environ.get("OMLX_HOST", "http://localhost:11434")
-LLM_MODEL   = os.environ.get("LLM_MODEL", "Qwen3.6-35B-A3B-MLX-8bit")
+OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+LLM_MODEL    = os.environ.get("LLM_MODEL", "qwen3.6:35b-a3b-mxfp8")
 
 
 # ─── 1. Data Collection ────────────────────────────────
@@ -155,7 +155,7 @@ def _call_llm(prompt, max_tokens=1024):
     _ensure_imports()
     try:
         resp = requests.post(
-            f"{OMLX_URL}/v1/chat/completions",
+            f"{OLLAMA_URL}/v1/chat/completions",
             json={"model": LLM_MODEL, "messages": [{"role":"user","content":prompt}], "stream": False, "max_tokens": max_tokens},
             timeout=180,
         )

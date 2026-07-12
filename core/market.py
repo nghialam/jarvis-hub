@@ -473,7 +473,7 @@ def calculate_technical_indicators(price_data):
 # --- LLM-powered due diligence report ---------------------------------------
 
 def llm_due_diligence(symbol, price_data, ta):
-    """Generate a mini due diligence report using OMLX."""
+    """Generate a mini due diligence report using OLLAMA."""
     if price_data.get("type") == "VN":
         lang = "Tieng Viet"
     else:
@@ -498,15 +498,15 @@ def llm_due_diligence(symbol, price_data, ta):
         f"Present in {lang}."
     )
 
-    # Use OMLX client with retry logic
-    import core.omlx_client as omlx
+    # Use OLLAMA client with retry logic
+    import core.ollama_client as ollama
     import time as time_mod
 
     max_retries = 3
     retry_delay = 2
 
     for attempt in range(max_retries):
-        result = omlx.omlx_call(prompt, timeout=60)
+        result = ollama.ollama_call(prompt, timeout=60)
         if result:
             return result
         if attempt < max_retries - 1:

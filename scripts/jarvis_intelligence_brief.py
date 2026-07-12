@@ -39,8 +39,8 @@ def _get_token():
 
 
 BOT_TOKEN = _get_token()
-OMLX_URL = os.environ.get("OMLX_HOST", "http://localhost:11434")
-LLM_MODEL = os.environ.get("LLM_MODEL", "Qwen3.6-35B-A3B-MLX-8bit")
+OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+LLM_MODEL = os.environ.get("LLM_MODEL", "qwen3.6:35b-a3b-mxfp8")
 
 RSS_SOURCES = [
     {"name": "CafeF Doanh Nghiep", "url": "https://cafef.vn/doanh-nghiep.rss", "section": "VN"},
@@ -71,7 +71,7 @@ def get_llm(system_prompt, user_prompt, timeout=360):
     for attempt in range(3):
         try:
             req = urllib.request.Request(
-                f"{OMLX_URL}/v1/chat/completions", data=req_data,
+                f"{OLLAMA_URL}/v1/chat/completions", data=req_data,
                 headers={"Content-Type": "application/json"}
             )
             resp = urllib.request.urlopen(req, timeout=timeout)

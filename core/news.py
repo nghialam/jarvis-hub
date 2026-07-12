@@ -112,12 +112,12 @@ def heuristic_sentiment(title: str, summary: str) -> Tuple[str, int, int]:
 
 
 def llm_sentiment(title: str, summary: str) -> tuple:
-    """Layer 2: OMLX LLM-powered sentiment analysis per article.
-    Returns (sentiment_label, brief_reasoning) or None if OMLX unavailable."""
+    """Layer 2: OLLAMA LLM-powered sentiment analysis per article.
+    Returns (sentiment_label, brief_reasoning) or None if OLLAMA unavailable."""
     try:
-        import core.omlx_client as omlx
+        import core.ollama_client as ollama
         config = _get_config()
-        if not config or "omlx" not in config:
+        if not config or "ollama" not in config:
             return None
 
         prompt = (
@@ -131,8 +131,8 @@ def llm_sentiment(title: str, summary: str) -> tuple:
             "Chi tra ve JSON, khong them giai thich gi khac."
         )
 
-        # Use OMLX client with JSON parsing
-        result = omlx.omlx_parse_json(prompt, timeout=30)
+        # Use OLLAMA client with JSON parsing
+        result = ollama.ollama_parse_json(prompt, timeout=30)
         if result is None:
             return None
 
