@@ -147,73 +147,112 @@ def build_analysis_prompt(data):
 
 
 def _clean_reasoning_preamble(text):
-    """Remove Qwen3.6 chain-of-thought preamble from streaming output.
+    """Remove Qwen3.6 chain-of-thought artifacts from streaming output.
 
-    Strips the model's internal reasoning which appears as:
-    - Numbered paragraphs (1., 2., 3...) with meta-commentary
-    - Lettered lists (A.), followed by actual market analysis
-    The function skips ALL initial paragraph blocks that are list-format
-    until it finds substantive content (VN-Index, sector names, etc.).
+    Instead of simple prefix-skip, uses content-based filtering: only paragraphs
+    containing substantive Vietnamese-market-analysis signals are kept; everything
+    else (self-referential commentary, draft-structuring, meta-instructions) is
+    discarded.
+
+    Substantive markers: VN-Index, sector/ticker names, technical analysis verbs
+    and nouns (tăng/giảm/dự báo/momentum/củng cố/bullish/....), or economic
+    indicators (lãi suất, dòng tiền, vốn FII/FDI....).
     """
-    # Split into paragraphs (double-newline blocks)
-    raw = text.split('\n\n') if '\n\n' in text else [text]
-    paragraphs = [p.strip() for p in raw if p.strip()]
+    raw = text.split("\n\n") if "\n\n" in text else [text]
+    paras = [p.strip() for p in raw if p.strip()]
 
-    # All Qwen3.6 output starts with a numbered/lettered reasoning block
-    SKIP_LIST_PATTERNS = [
-        "here", "thinking",      # "here's a thinking process"
-        "let me",                # "let me think/analyze"
-        "i need to",             # "I need to analyze/infer"
-        "as an ai",              # self-reference
-        "**role:** financial",   # "**Role: Financial..." (case insensitive)
-        "draft - section by",    # "**Draft - Section by Section"
-        "mental refinement",     # "Mental Refinement in Vietnamese:**"
-        "let's draft",           # conversational filler
-        "let me start",          # "let me start by..."
-        "sure,",                 # "Sure, here's the analysis..."
-        "okay,",                 # "Okay, let me analyze..."
-        "draft generation (mental refinement",  # "Draft Generation (Mental Refinement in Vietnamese"
+    # Patterns that signal reasoning artifacts (meta-commentary, not content)
+    ARTIFACT_PATTERNS = [
+        "here", "thinking",                  # "here's a thinking process"
+        "let me", "i need to",              # task-planning language
+        "as an ai",                          # self-reference
+        "**role:** financial",               # role-playing preamble
+        "draft - section by",               # planning phrasing
+        "mental refinement",                 # internal refinement loop
+        "let's draft",                       # meta-drafting
+        "let me start",                      # task-planning
+        "sure,",                             # conversational filler
+        "okay,",                             # conversational filler
+        "draft generation (mental refinement",
+        "check constraints",                 # constraint-checking meta
+        "final output draft",               # drafting meta
+        "here's the analysis",              # greeting/meta
+        "i'll start",                        # planning language
+        "reviewing the data",               # reasoning preamble
+        "let's refine",                     # self-correction
+        "self-correction",                  # self-review artifact
+        "structure check",                  # meta-validation
+        "will generate",                    # pre-generation meta
+        "draft generation in",              # drafting language
+        "refine the draft",                 # refinement loop
+        "align with provided data",        # planning artifact
+        "keeping it tight",                # self-note artifact
+        "ensure tone is",                  # meta-instruction
+        "i will format",                   # intent statement
     ]
 
-    skip_count = 0
+    # Markers that indicate substantive content — at least one must exist to keep
+    SUBSTANTIVE_MARKERS = [
+        # Market indices & direction
+        "vn", "vnei", "hnx", "upcom",
+        "index trend", "đỉnh", "mức cao", "tăng", "giảm", "bốc hơi",
+        "bullish", "bearish", "tái cấu",
+        # Vietnamese sector names
+        "bất động sản", "ngân hàng", "công nghệ", "bán lẻ", "năng lượng",
+        "real estate", "banking", "technology", "retail", "energy",
+        # Technical/economic analysis terms
+        "khối lượng", "đáo thuế", "dòng tiền", "vốn fii", "fdi",
+        "lãi suất", "chính sách", "vĩ mô", "tâm lý",
+        "mua vào", "bán ra", "target", "hỗ trợ", "kháng cự",
+    ]
 
-    for para in paragraphs[:25]:       # Check first 25 paragraphs max
-        lower_para = para.lower()[:300]
-        first_line_lc = para.split('\n')[0].lower().strip() if para.split('\n') else ''
+    def is_substantive(para):
+        """Check if this paragraph contains substantive market analysis content."""
+        lower = para.lower()[:500]
+        first_line = para.split("\n")[0].lower().strip()[:200]
 
-        # Direct meta-reasoning patterns at start of paragraph
-        if any(p in lower_para for p in SKIP_LIST_PATTERNS):
-            skip_count += 1
-            continue
+        # Quick rejection: matches artifact pattern?
+        for pat in ARTIFACT_PATTERNS:
+            if pat in lower:
+                return False
 
-        # Numbered reasoning (1. **Text**) - skip unless substantive VN market content exists
-        is_numbered_list = bool(re.match(r'^\s*\d+\.\s+[\[*]', first_line_lc))
-        if is_numbered_list:
-            meta_only_kw = [
-                'data interpretation', 'assumptions',
-                'infer ', 'based on typical',
-                'analyze user input', 'data provided',
-                'understand the', 'read the prompt',
-            ]
-            real_content_kw = [
-                'vn-index', 'sector', 'banking', 'ngân hàng',
-                'vietnam', 'stock', 'fpta', 'vnm', 'vic', 'acb',
-                's&p500', 'djia', 'nasdaq',
-                'bullish', 'bearish', 'neutral ',
-                'trend', 'momentum', 'recommendation',
-            ]
+        # Numbered reasoning titles -> reject
+        if re.match(r"^\s*\d+\.\s+[\*]{1,2}\s*\w", first_line):
+            return False
+        if re.match(r"^[A-Z]\.\s+[\*]{1,2}\s*\w", first_line):
+            return False
 
-            has_meta = any(kw in lower_para for kw in meta_only_kw)
-            has_real = any(kw in lower_para for kw in real_content_kw)
+        # Must contain at least one substantive marker
+        for marker in SUBSTANTIVE_MARKERS:
+            if marker.lower() in lower:
+                return True
 
-            if has_meta and not has_real:
-                skip_count += 1
-                continue
+        # Fallback: Vietnamese market keywords as secondary signal
+        fallback_kws = [
+            "tăng", "giảm", "xu hướng", "phân tích", "dự báo",
+            "đỉnh", "kháng cự", "hỗ trợ", "lãi suất", "vốn",
+        ]
+        return any(kw in lower for kw in fallback_kws)
 
-    cleaned = paragraphs[skip_count:]
-    result = '\n\n'.join(cleaned).strip()
+    good = [p for p in paras if is_substantive(p)]
+
+    # Deduplicate repeated sections (Qwen repeats after re-drafting loops)
+    seen_headings = set()
+    deduped = []
+    heading_re = re.compile(r"##*\s*\d+\.\s*(.*)")
+
+    for para in good:
+        heading_match = heading_re.match(para.split("\n")[0].strip())
+        if heading_match:
+            heading_text = heading_match.group(1).lower()[:50]
+            if not heading_text or heading_text.startswith("tổng quan"):
+                if heading_text in seen_headings:
+                    continue
+                seen_headings.add(heading_text)
+        deduped.append(para)
+
+    result = "\n\n".join(deduped).strip()
     return result if result else text
-
 
 def _ollama_healthcheck():
     """Check if Ollama API is responding."""
@@ -292,15 +331,16 @@ def call_ollama(prompt, model="qwen3.6:35b-a3b-mxfp8"):
     return response
 
 
-def save_analysis(conn, run_date, analysis_text, model_used="unknown", confidence=0.0):
+def save_analysis(conn, run_date, analysis_text, model_used="unknown", confidence=0.0, tokens_consumed=0):
     """Save LLM analysis result to DB."""
     cursor = conn.execute(
         "INSERT OR REPLACE INTO analytical_reports "
-        "(run_date, report_type, title, summary, full_content, status, model_used, created_at) "
-        "VALUES (?, ?, ?, ?, ?, 'completed', ?, CURRENT_TIMESTAMP)",
+        "(run_date, report_type, title, summary, full_content, status, model_used, confidence_scores, tokens_consumed, created_at) "
+        "VALUES (?, ?, ?, ?, ?, 'completed', ?, ?, ?, CURRENT_TIMESTAMP)",
         (run_date, "market_overview",
           "Market Analysis %s" % datetime.now().strftime("%H:%M"),
-         analysis_text[:500], analysis_text, model_used),
+         analysis_text[:500], analysis_text, model_used,
+         json.dumps({"confidence": confidence}) if confidence else None, tokens_consumed),
     )
 
     conn.execute(
@@ -360,22 +400,37 @@ def run_analysis(db_path=None, dry_run=False):
     ])
     confidence = min(0.95, 0.4 + has_sections * 0.12)
 
-    report_id = save_analysis(conn, today, cleaned, model, confidence)
+    tokens_used = len(cleaned)
+    report_id = save_analysis(conn, today, cleaned, model, confidence, tokens_used)
+
+    # Export markdown file to cron output folder
+    cron_output_dir = Path.home() / ".hermes" / "cron" / "output" / "tier2-daily"
+    cron_output_dir.mkdir(parents=True, exist_ok=True)
+    report_file = cron_output_dir / ("%s_report_%s.md" % (today, datetime.now().strftime("%Y%m%d_%H%M%S")))
+    try:
+        with open(report_file, "w", encoding="utf-8") as f:
+            f.write("# Daily Market Analysis\n\n")
+            f.write("**Date**: %s\n\n**Model**: %s\n\n**Confidence**: %.0f%%\n\n---\n\n" % (today, model, confidence * 100))
+            f.write(cleaned)
+        print("      Report file saved: %s" % report_file)
+    except Exception as e:
+        print("      [WARN] Could not write markdown file: %s" % str(e))
 
     print("[Tier 2] Analysis complete.")
     print("      Report ID: %s" % report_id)
     print("      Model: %s" % model)
     print("      Confidence: %.0f%%" % (confidence * 100))
-    print("      Length: %d tokens" % len(cleaned))
+    print("      Length: %d tokens" % tokens_used)
 
     conn.commit()
     return {
-        "report_id": report_id,
-        "model": model,
-        "confidence": confidence,
-        "length": len(cleaned),
-        "preview": cleaned.strip()[:300],
-    }
+         "report_id": report_id,
+         "model": model,
+         "confidence": confidence,
+         "length": len(cleaned),
+         "preview": cleaned.strip()[:300],
+         "file_path": str(report_file),
+     }
 
 
 if __name__ == "__main__":

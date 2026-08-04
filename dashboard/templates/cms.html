@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jarvis CMS — Dashboard</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <!-- Marked.js for proper Markdown preview -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@14.1.0/marked.min.js"></script>
+    <style>
+         :root { --sidebar-w: 300px; }
+
+         .cms-layout { display: flex; min-height: calc(100vh - 80px); }
+
+         /* Sidebar */
+         .cms-sidebar {
+            width: var(--sidebar-w); background: var(--bg-secondary);
+            border-right: 1px solid var(--border-color); padding: 16px;
+            overflow-y: auto; flex-shrink: 0; display: flex; flex-direction: column;
+         }
+         .cms-sidebar h3 { color: var(--accent-blue); font-size: 14px; margin-bottom: 12px; }
+
+         /* Filter bar in sidebar */
+         .cms-filter-bar {
+            display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap;
+         }
+         .cms-filter-btn {
+            padding: 4px 10px; border-radius: 4px; font-size: 11px; cursor: pointer;
+            background: rgba(255, 255, 255, 0.04); color: var(--text-secondary);
+            border: 1px solid var(--border-color); transition: all 0.2s;
+         }
+         .cms-filter-btn:hover { background: rgba(74, 166, 255, 0.15); border-color: var(--accent-blue); }
+         .cms-filter-btn.active { background: rgba(74, 166, 255, 0.2); border-color: var(--accent-blue); color: #fff; font-weight: 600; }
+
+         .status-search-input {
+            width: 100%; margin-bottom: 14px; padding: 8px 10px;
+            border-radius: 6px; font-size: 12px; outline: none;
+            background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-color);
+         }
+         .status-search-input:focus { border-color: var(--accent-blue); box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2); }
+
+         /* Article list */
+         .article-list { list-style: none; padding: 0; margin: 0; flex: 1; overflow-y: auto; }
+         .article-list li {
+            padding: 10px 12px; border-radius: 6px; cursor: pointer;
+            font-size: 13px; display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 4px; color: var(--text-primary); transition: background 0.2s;
+         }
+         .article-list li:hover { background: var(--bg-card-hover, rgba(255,255,255,0.04)); }
+         .article-list li.active { background: var(--accent-blue); color: #fff; }
+
+         .article-list-item-info { display: flex; flex-direction: column; gap: 2px; }
+         .article-list-item-title { font-weight: 600; font-size: 13px; }
+         .article-list-item-meta { font-size: 10px; opacity: 0.7; }
+
+         /* Main editor area */
+         .cms-main { flex: 1; padding: 24px; overflow-y: auto; background: var(--bg-primary); }
+         .cms-editor { max-width: 860px; }
+         .cms-editor label { display: block; color: var(--text-secondary); font-size: 12px; margin-bottom: 4px; margin-top: 14px; }
+         .cms-editor input[type="text"], .cms-editor textarea, .cms-editor select {
+            width: 100%; padding: 10px 12px; border: 1px solid var(--border-color);
+            background: var(--bg-secondary); color: var(--text-primary); font-size: 14px;
+            border-radius: 6px; outline: none; box-sizing: border-box; transition: border-color 0.2s;
+         }
+         .cms-editor input:focus, .cms-editor textarea:focus, .cms-editor select:focus {
+            border-color: var(--accent-blue); box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
+         }
+         .cms-editor textarea { min-height: 350px; font-family: 'SF Mono', Monaco, monospace; line-height: 1.7; resize: vertical; }
+
+         /* Toolbar */
+         .toolbar-btn-group { display: flex; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
+         .toolbar-preview label {
+            display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--accent-blue); font-size: 12px;
+         }
+
+         /* Toolbar formatting buttons */
+         .editor-toolbar {
+            display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; padding: 8px; background: var(--bg-secondary);
+            border: 1px solid var(--border-color); border-radius: 6px;
+         }
+         .toolbar-btn {
+            padding: 4px 10px; border-radius: 4px; font-size: 12px; cursor: pointer;
+            background: var(--bg-card); color: var(--text-secondary); border: 1px solid var(--border-color);
+            transition: all 0.2s;
+         }
+         .toolbar-btn:hover { background: rgba(74, 166, 255, 0.15); border-color: var(--accent-blue); color: var(--text-primary); }
+
+         /* Preview */
+         #preview {
+            margin-top: 24px; padding: 20px; background: var(--bg-secondary);
+            border: 1px solid var(--border-color); border-radius: 8px;
+            line-height: 1.7; display: none; color: var(--text-primary);
+         }
+
+         #preview h1 { font-size: 24px; margin-top: 16px; margin-bottom: 12px; color: var(--accent-blue); border-bottom: 1px solid var(--border-color); padding-bottom: 8px; }
+         #preview h2 { font-size: 20px; margin-top: 14px; margin-bottom: 8px; color: var(--accent-purple); }
+         #preview h3 { font-size: 16px; margin-top: 12px; margin-bottom: 6px; }
+         #preview p { margin: 8px 0; }
+         #preview strong { color: var(--accent-blue); font-weight: 600; }
+         #preview em { color: var(--accent-purple); font-style: italic; }
+         #preview blockquote { border-left: 3px solid var(--accent-purple); padding-left: 14px; color: var(--text-secondary); margin: 8px 0; }
+         #preview ul, #preview ol { padding-left: 24px; margin: 8px 0; }
+         #preview li { margin: 4px 0; }
+         #preview code { background: var(--bg-card); padding: 2px 6px; border-radius: 3px; font-family: 'SF Mono', Monaco, monospace; font-size: 13px; }
+         #preview pre { background: var(--bg-card); padding: 12px; border-radius: 6px; overflow-x: auto; margin: 8px 0; }
+         #preview a { color: var(--accent-blue); text-decoration: underline; }
+         #preview hr { border: none; border-top: 1px solid var(--border-color); margin: 16px 0; }
+
+         /* Stats cards */
+         .btn-new-art { width: 100%; padding: 10px; background: var(--accent-green); color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; margin-bottom: 14px; font-weight: 600; transition: opacity 0.2s; }
+         .btn-new-art:hover { opacity: 0.85; }
+
+         .cms-stats { display: flex; gap: 10px; margin-bottom: 14px; }
+         .stat-card { background: var(--bg-card); padding: 10px 12px; border-radius: 6px; font-size: 12px; text-align: center; flex: 1; border: 1px solid var(--border-color); }
+         .stat-card .num { font-size: 24px; font-weight: bold; color: var(--accent-blue); display: block; }
+
+         /* Badges */
+         .badge-published { font-size: 10px; padding: 2px 8px; border-radius: 4px; background: rgba(46, 160, 67, 0.25); color: var(--accent-green); }
+         .badge-draft { font-size: 10px; padding: 2px 8px; border-radius: 4px; background: rgba(255, 180, 0, 0.3); color: #ffb400; }
+         .badge-unpublished { font-size: 10px; padding: 2px 8px; border-radius: 4px; background: rgba(248, 81, 73, 0.2); color: var(--accent-red); }
+
+         /* Status toggle */
+         .status-toggle {
+            display: flex; gap: 4px; margin-top: 10px;
+         }
+         .status-btn {
+            padding: 6px 14px; border-radius: 4px; font-size: 12px; cursor: pointer;
+            border: 1px solid var(--border-color); transition: all 0.2s; background: var(--bg-card); color: var(--text-secondary);
+         }
+         .status-btn:hover { border-color: var(--accent-blue); }
+         .status-btn.active-draft { background: rgba(255, 180, 0, 0.2); border-color: #ffb400; color: #ffb400; }
+         .status-btn.active-published { background: rgba(46, 160, 67, 0.2); border-color: var(--accent-green); color: var(--accent-green); }
+
+         /* Empty state */
+         #emptyState { text-align: center; padding: 80px 20px; color: var(--text-secondary); }
+         #emptyState h2 { color: var(--accent-blue); margin-bottom: 12px; }
+
+         /* Tags display */
+         .tags-display { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+         .tag-pill { background: rgba(88, 166, 255, 0.15); color: var(--accent-blue); padding: 2px 10px; border-radius: 12px; font-size: 11px; }
+
+         /* Responsive */
+         @media (max-width: 1024px) {
+            .cms-layout { flex-direction: column; }
+            .cms-sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--border-color); max-height: 300px; }
+         }
+
+         @media (max-width: 768px) {
+            .cms-main { padding: 12px; }
+            .editor-toolbar { gap: 3px; padding: 6px; }
+            .toolbar-btn { padding: 3px 8px; font-size: 11px; }
+         }
+
+         @media (max-width: 480px) {
+            .cms-stats { flex-direction: column; gap: 6px; }
+            .status-toggle { flex-direction: column; }
+         }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📝 Jarvis CMS — Quản lý Bài viết</h1>
+        <div style="display:flex; gap:8px; align-items:center;">
+            <button class="btn btn-sm" onclick="window.location.href='/hub2'" style="background:var(--bg-card);color:var(--text-primary);">← Quay lại Dashboard</button>
+        </div>
+    </div>
+
+    <div class="cms-layout">
+        <!-- Sidebar -->
+        <aside class="cms-sidebar">
+            <button class="btn-new-art" onclick="createNewArticle()">+ Bài viết mới</button>
+            <input type="text" id="searchBox" class="status-search-input" placeholder="Tìm bài viết..." oninput="filterArticles(this.value)">
+
+            <!-- Category filter -->
+            <div class="cms-filter-bar" id="categoryFilters">
+                <button class="cms-filter-btn active" data-category="all" onclick="setCategoryFilter('all')">All</button>
+                <button class="cms-filter-btn" data-category="general" onclick="setCategoryFilter('general')">General</button>
+                <button class="cms-filter-btn" data-category="market-analysis" onclick="setCategoryFilter('market-analysis')">Market</button>
+                <button class="cms-filter-btn" data-category="stock-pick" onclick="setCategoryFilter('stock-pick')">Stock Pick</button>
+            </div>
+
+            <!-- Status filter -->
+            <div class="cms-filter-bar" id="statusFilters">
+                <button class="cms-filter-btn active" data-status="all" onclick="setStatusFilter('all')">All</button>
+                <button class="cms-filter-btn" data-status="draft" onclick="setStatusFilter('draft')">Draft</button>
+                <button class="cms-filter-btn" data-status="published" onclick="setStatusFilter('published')">Published</button>
+            </div>
+
+            <div class="cms-stats">
+                <div class="stat-card"><span class="num" id="cntTotal">0</span>Tổng</div>
+                <div class="stat-card"><span class="num" id="cntPublished" style="color:var(--accent-green);">0</span>Xuất bản</div>
+                <div class="stat-card"><span class="num" id="cntDraft" style="color:#ffb400;">0</span>Nháp</div>
+            </div>
+
+            <h3>DANH SÁCH BÀI VIẾT</h3>
+            <ul class="article-list" id="articleList"></ul>
+        </aside>
+
+        <!-- Main Editor -->
+        <main class="cms-main">
+            <div class="cms-editor" id="editorPanel" style="display:none;">
+                <input type="hidden" id="artId">
+
+                <label>Tiêu đề</label>
+                <input type="text" id="artTitle" placeholder="Nhập tiêu đề bài viết...">
+
+                <label>Danh mục</label>
+                <select id="artCategory">
+                    <option value="general">Tổng hợp</option>
+                    <option value="market-analysis">Phân tích thị trường</option>
+                    <option value="sector-analysis">Phân tích ngành</option>
+                    <option value="stock-pick">Gợi ý cổ phiếu</option>
+                    <option value="opinion">Quan điểm / Bình luận</option>
+                    <option value="economy">Kinh tế vĩ mô</option>
+                </select>
+
+                <label>Hình đại diện (URL ảnh, optional)</label>
+                <input type="text" id="artImage" placeholder="https://example.com/image.jpg">
+
+                <label>Từ khóa (cách nhau bởi dấu phẩy)</label>
+                <input type="text" id="artTags" placeholder="VIC, VCB, phân tích kỹ thuật">
+
+                <label>Tra cứu slug (tự động từ tiêu đề)</label>
+                <input type="text" id="artSlug" placeholder="du-lieu-thi-truong-ngay-12-07-2026">
+
+                <label style="display:flex; justify-content:space-between; align-items:center;">
+                   Nội dung (Markdown)
+                    <span class="toolbar-preview"><label><input type="checkbox" id="chkPreview"> Xem trước</label></span>
+                </label>
+
+                <!-- Markdown toolbar -->
+                <div class="editor-toolbar">
+                   <button class="toolbar-btn" onclick="insertMd('**', '**')" title="Bold (Ctrl+B)">B</button>
+                   <button class="toolbar-btn" onclick="insertMd('*', '*')" title="Italic (Ctrl+I)" style="font-style:italic">I</button>
+                   <button class="toolbar-btn" onclick="insertMd('~~', '~~')" title="Strikethrough">S</button>
+                   <span style="width:1px;background:var(--border-color);margin:0 4px;"></span>
+                   <button class="toolbar-btn" onclick="insertMd('# ', '')" title="Heading 1">H1</button>
+                   <button class="toolbar-btn" onclick="insertMd('## ', '')" title="Heading 2">H2</button>
+                   <button class="toolbar-btn" onclick="insertMd('### ', '')" title="Heading 3">H3</button>
+                   <span style="width:1px;background:var(--border-color);margin:0 4px;"></span>
+                   <button class="toolbar-btn" onclick="insertMd('> ', '')" title="Quote">❝</button>
+                   <button class="toolbar-btn" onclick="insertMd('\n- ', '')" title="Bullet list">• List</button>
+                   <button class="toolbar-btn" onclick="insertMd('\n1. ', '')" title="Numbered list"># List</button>
+                   <button class="toolbar-btn" onclick="insertMd('[', '](url)')" title="Link">🔗</button>
+                   <button class="toolbar-btn" onclick="insertMd('`', '`')" title="Code">&lt;&gt;</button>
+                   <button class="toolbar-btn" onclick="insertMd('\n```\n', '\n```\n')" title="Code block">⌨️</button>
+                   <button class="toolbar-btn" onclick="insertMd('\n---\n', '')" title="Horizontal rule">―</button>
+                </div>
+
+                <textarea id="artContent" placeholder="Viết nội dung bằng Markdown..." oninput="onEditorInput()"></textarea>
+
+                <div id="preview"></div>
+
+                <div class="toolbar-btn-group">
+                    <button class="btn btn-primary" onclick="saveArticle()">💾 Lưu bài viết</button>
+                    <button class="btn btn-secondary" style="background:var(--accent-red);color:#fff;" onclick="deleteArticle()">🗑 Xóa</button>
+                </div>
+
+                <!-- Status toggle -->
+                <label>Trạng thái</label>
+                <div class="status-toggle">
+                    <button class="status-btn" id="btnDraft" onclick="setStatus('draft')">Nháp (Draft)</button>
+                    <button class="status-btn" id="btnPublished" onclick="setStatus('published')">Xuất bản (Publish)</button>
+                </div>
+
+                <!-- Tags display -->
+                <div id="tagsDisplay" class="tags-display"></div>
+            </div>
+
+            <!-- Empty state shown before any article is selected -->
+            <div id="emptyState" style="text-align:center;padding:60px 20px;color:var(--text-secondary);">
+                <h2 style="color:var(--accent-blue);margin-bottom:12px;">📝 Jarvis CMS</h2>
+                <p>Bấm <strong>"+ Bài viết mới"</strong> ở sidebar để tạo bài viết, hoặc chọn một bài từ danh sách bên trái.</p>
+            </div>
+        </main>
+    </div>
+
+     <script>
+        const API = '/api/cms';
+        let allArticles = [];
+        let currentArtId = null;
+        let currentStatus = 'draft'; // track article status client-side
+
+         // Filter state
+        let activeCategory = 'all';
+        let activeStatus = 'all';
+
+         // ---------- Markdown-to-HTML using marked.js + custom renderer ----------
+         // Configure marked.js with safe options for internal use only (see top of file)
+         const mdRenderer = new marked.Renderer();
+         // Add table support via custom renderer
+         mdRenderer.code = function(code, language) {
+           const validLangs = ['python', 'javascript', 'bash', 'json', 'html'];
+           const lang = validLangs.includes(language) ? language : '';
+           return `<pre><code class="language-${lang}">${code.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</code></pre>`;
+         };
+         marked.setOptions({ renderer: mdRenderer, gfm: true, breaks: false });
+
+         // Use marked.js if available (from CDN), fallback to simple regex
+         md2html = function(md) {
+           if (typeof marked !== 'undefined') {
+               return marked.parse(md);
+           }
+           // Fallback: simple regex parser
+           return md
+                 .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+                 .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+                 .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+                 .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                 .replace(/\*(.+?)\*/g, '<em>$1</em>')
+                 .replace(/~~(.+?)~~/g, '<del>$1</del>')
+                 .replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>')
+                 .replace(/^\- (.+)$/gm, '<li>$1</li>')
+                 .replace(/^(\d+)\. (.+)$/g, '<p><strong>$1.</strong> $2</p>')
+                 .replace(/`([^`]+)`/g, '<code>$1</code>')
+                 .replace(/\n\n/g, '</p><p>')
+                 .replace(/\n/g, '<br>');
+         };
+
+         // ---------- Markdown toolbar helper ----------
+        function insertMd(before, after) {
+            const ta = document.getElementById('artContent');
+            const start = ta.selectionStart;
+            const end = ta.selectionEnd;
+            const selected = ta.value.substring(start, end) || 'text';
+            const replacement = before + selected + after;
+            ta.value = ta.value.substring(0, start) + replacement + ta.value.substring(end);
+            ta.focus();
+            ta.selectionStart = start + before.length;
+            ta.selectionEnd = start + before.length + selected.length;
+            onEditorInput();
+          }
+
+         // ---------- Category & Status filters ----------
+        function setCategoryFilter(cat) {
+            activeCategory = cat;
+            document.querySelectorAll('#categoryFilters .cms-filter-btn').forEach(b => b.classList.remove('active'));
+            const btn = document.querySelector(`#categoryFilters .cms-filter-btn[data-category="${cat}"]`);
+            if (btn) btn.classList.add('active');
+            applyFilters();
+          }
+
+        function setStatusFilter(status) {
+            activeStatus = status;
+            document.querySelectorAll('#statusFilters .cms-filter-btn').forEach(b => b.classList.remove('active'));
+            const btn = document.querySelector(`#statusFilters .cms-filter-btn[data-status="${status}"]`);
+            if (btn) btn.classList.add('active');
+            applyFilters();
+          }
+
+        function applyFilters() {
+            var q = (document.getElementById('searchBox').value || '').toLowerCase();
+            var filtered = allArticles.filter(function(a) {
+                var matchSearch = (a.title||'').toLowerCase().includes(q) ||
+                        (a.category||'').toLowerCase().includes(q) ||
+                        ((a.tags||[]).join(' ').toLowerCase()).includes(q);
+                var matchCategory = activeCategory === 'all' || (a.category || '') === activeCategory;
+                var matchStatus = activeStatus === 'all' || (a.status || 'draft') === activeStatus;
+                return matchSearch && matchCategory && matchStatus;
+              });
+            renderArticleList(filtered);
+          }
+
+         // ---------- Load all articles from API ----------
+        loadArticles = async function() {
+            try {
+                const r = await fetch(API);
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                var data = await r.json();
+                allArticles = data.articles || [];
+                applyFilters();
+                updateStats(allArticles);
+              } catch (e) {
+                console.error('Failed to load articles:', e);
+                document.getElementById('emptyState').innerHTML = '<p style="color:var(--accent-red);">Không thể tải danh sách bài viết. Kiểm tra kết nối.</p>';
+              }
+         };
+
+         // ---------- Sidebar helpers ----------
+        function updateStats(list) {
+            document.getElementById('cntTotal').textContent = list.length;
+            var published = list.filter(function(a){return a.status==='published';}).length;
+            var drafts = list.filter(function(a){return (a.status!=='published');}).length;
+            document.getElementById('cntPublished').textContent = published;
+            document.getElementById('cntDraft').textContent = drafts;
+          }
+
+        function renderArticleList(list) {
+             // Sort by created_at desc
+            list.sort(function(a,b){return (b.created_at||'').localeCompare(a.created_at||'');});
+            var ul = document.getElementById('articleList');
+            if (!list.length) {
+                ul.innerHTML = '<li style="color:var(--text-secondary);cursor:default;">Không có bài viết nào phù hợp.</li>';
+                return;
+              }
+            ul.innerHTML = list.map(function(a) {
+                var badgeCls, badgeText;
+                if (a.status === 'published') {
+                    badgeCls = 'badge-published'; badgeText = 'Đã đăng';
+                  } else if (a.status === 'unpublished') {
+                    badgeCls = 'badge-unpublished'; badgeText = 'Bỏ đăng';
+                  } else {
+                    badgeCls = 'badge-draft'; badgeText = 'Nháp';
+                  }
+                var cat = a.category || 'general';
+                var meta = (a.created_at || '').substring(0, 10);
+                return '<li onclick="loadArticle('+a.id+')" id="arti-'+a.id+'">'+
+                    '<div class="article-list-item-info">'+
+                    '<span class="article-list-item-title">'+(a.title || 'Untitled')+'</span>'+
+                    '<span class="article-list-item-meta">'+cat+' • '+meta+'</span>'+
+                    '</div>'+badge+'</li>';
+              }).join('');
+         }
+
+        function filterArticles(query) {
+             // Re-apply all filters including search text
+            applyFilters();
+          }
+
+        function highlightActive(id) {
+            document.querySelectorAll('.article-list li').forEach(function(li){li.classList.remove('active');});
+            if (id) { var li = document.getElementById('arti-'+id); if(li) li.classList.add('active'); }
+         }
+
+         // ---------- CRUD ----------
+        createNewArticle = function() {
+            artId.value = '';
+            artTitle.value = 'Bài viết ' + new Date().toLocaleDateString('vi-VN');
+            artSlug.value = '';
+            artContent.value = '';
+            artCategory.value = 'general';
+            artImage.value = '';
+            artTags.value = '';
+            preview.style.display = 'none';
+            chkPreview.checked = false;
+            currentStatus = 'draft';
+            updateStatusButtons();
+            updateTagsDisplay();
+
+            editorPanel.style.display = 'block';
+            emptyState.style.display = 'none';
+            currentArtId = null;
+            highlightActive(null);
+         };
+
+        loadArticle = async function(id) {
+            try {
+                currentArtId = id;
+                var r = await fetch(API + '/' + id);
+                if (!r.ok) return alert('Lỗi khi tải bài viết');
+                var art = await r.json();
+                if (!art.success) return;
+
+                artId.value = art.id || '';
+                artTitle.value = art.title || '';
+                artSlug.value = art.slug || '';
+                artContent.value = art.content || '';
+                artCategory.value = art.category || 'general';
+                artImage.value = art.featured_image || '';
+                var tagsArr = Array.isArray(art.tags) ? art.tags : (art.tags ? String(art.tags).split(',') : []);
+                artTags.value = tagsArr.map(function(t){return t.trim();}).filter(Boolean).join(', ');
+
+                currentStatus = art.status || 'draft';
+                updateStatusButtons();
+                updateTagsDisplay();
+                generateSlug();
+
+                editorPanel.style.display = 'block';
+                emptyState.style.display = 'none';
+                highlightActive(id);
+              } catch(e) { alert('Lỗi kết nối: '+e.message); }
+         };
+
+        saveArticle = async function() {
+            var title = artTitle.value.trim();
+            var content = artContent.value.trim();
+            var slug = artSlug.value.trim() || generateSlugFrom(title);
+            if (!title && !content) return alert('Vui lòng nhập tiêu đề hoặc nội dung.');
+
+            var body = {
+                title: title,
+                content: content,
+                slug: slug,
+                category: artCategory.value,
+                featured_image: artImage.value.trim(),
+                tags: artTags.value.split(',').map(function(t){return t.trim();}).filter(Boolean),
+                status: currentStatus
+              };
+
+            var id = artId.value;
+            var method = id ? 'PUT' : 'POST';
+            var url = id ? API + '/' + id : API;
+
+            try {
+                var r = await fetch(url, {
+                    method: method,
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify(body)
+                  });
+                var result = await r.json();
+                if (!result.success) return alert('Lỗi khi lưu: ' + (result.error || ''));
+
+                updateTagsDisplay();
+                await loadArticles();
+                if (!id) { loadArticle(result.id); } else { highlightActive(parseInt(id)); }
+              } catch(e) { alert('Lỗi kết nối: '+e.message); }
+         };
+
+        deleteArticle = async function() {
+            var id = artId.value;
+            if (!id) return;
+            if (!confirm('Bạn có chắc muốn xóa bài viết này? Dữ liệu sẽ không bị khôi phục.')) return;
+
+            try {
+                var r = await fetch(API + '/' + id, { method: 'DELETE' });
+                var result = await r.json();
+                if (!result.success) return alert('Lỗi: ' + (result.error || ''));
+                editorPanel.style.display = 'none';
+                emptyState.style.display = '';
+                currentArtId = null;
+                currentStatus = 'draft';
+                highlightActive(null);
+                await loadArticles();
+              } catch(e) { alert('Lỗi kết nối: '+e.message); }
+         };
+
+         // ---------- Status toggle ----------
+        function setStatus(status) {
+            currentStatus = status;
+            updateStatusButtons();
+          }
+
+        function updateStatusButtons() {
+            const btnDraft = document.getElementById('btnDraft');
+            const btnPublished = document.getElementById('btnPublished');
+            if (!btnDraft || !btnPublished) return;
+
+            if (currentStatus === 'published') {
+                btnDraft.className = 'status-btn';
+                btnPublished.className = 'status-btn active-published';
+              } else {
+                btnDraft.className = 'status-btn active-draft';
+                btnPublished.className = 'status-btn';
+              }
+          }
+
+         // ---------- Tags display ----------
+        function updateTagsDisplay() {
+            var tagsEl = document.getElementById('tagsDisplay');
+            if (!tagsEl) return;
+            var tags = (artTags.value || '').split(',').map(t=>t.trim()).filter(Boolean);
+            tagsEl.innerHTML = tags.map(function(t) {
+                return '<span class="tag-pill">' + t + '</span>';
+              }).join('');
+          }
+
+         // ---------- Editor helpers ----------
+         function generateSlugFrom(text) {
+          if (!text) return '';
+          return text.toLowerCase()
+                .replace(/Đ/g,'d').replace(/đ/g,'d')
+                .replace(/[àáảạãâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốỒỔỖỘơớờởỡợùúủũụưứừửữựỳýỷỹỵ]/g,'')
+                .replace(/[^a-z0-9\\s]+/g,'-')
+                .trim().replace(/\s+/g,'-').replace(/-+/g,'-');
+         }
+
+         function generateSlug() {
+          var title = artTitle.value;
+          if (title) artSlug.value = generateSlugFrom(title);
+         }
+
+         // ---------- Keyboard shortcuts for editor ----------
+         document.addEventListener('keydown', function(e) {
+          const ta = document.getElementById('artContent');
+          if (!ta) return;
+          // Only fire when textarea is focused
+          if (document.activeElement !== ta) return;
+          if (e.ctrlKey || e.metaKey) {
+              switch(e.key.toLowerCase()) {
+                  case 'b':
+                      e.preventDefault();
+                      insertMd('**', '**');
+                      break;
+                  case 'i':
+                      e.preventDefault();
+                      insertMd('*', '*');
+                      break;
+                  case 'k':
+                      e.preventDefault();
+                      insertMd('[', '](url)');
+                      break;
+              }
+          }
+         });
+
+        var _previewTimer = null;
+        onEditorInput = function() {
+            if (_previewTimer) clearTimeout(_previewTimer);
+            if (chkPreview.checked) {
+                 _previewTimer = setTimeout(function(){
+                    preview.innerHTML = md2html(artContent.value);
+                    preview.style.display = 'block';
+                  }, 300);
+              } else {
+                preview.style.display = 'none';
+              }
+         };
+
+         // ---------- Init on page load ----------
+        document.addEventListener('DOMContentLoaded', function() {
+            loadArticles();
+            artTitle.addEventListener('input', generateSlug);
+            chkPreview.addEventListener('change', function() {
+                if (this.checked) {
+                    preview.innerHTML = md2html(artContent.value);
+                    preview.style.display = 'block';
+                  } else {
+                    preview.style.display = 'none';
+                  }
+              });
+         });
+     </script>
+</body>
+</html>

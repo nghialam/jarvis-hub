@@ -2,7 +2,10 @@
 import sqlite3, random
 from datetime import date, timedelta
 
-DB = "../knowledge/jarvis.db"
+import os
+
+
+DB = os.path.join(os.path.dirname(__file__), '..', 'knowledge', 'jarvis.db')
 
 
 def get_conn():
@@ -13,17 +16,17 @@ def get_conn():
 
 def create_schema(conn):
     q = "DROP TABLE IF EXISTS alerts; "
-    q += "CREATE TABLE alerts (id INT PRIMARY KEY AUTOINCREMENT, user_id INT DEFAULT 1, ticker TEXT CHECK(ticker IN ('a','b')), threshold FLOAT, active INT DEFAULT 1); "
+    q += "CREATE TABLE alerts (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER DEFAULT 1, ticker TEXT CHECK(ticker IN ('a','b')), threshold FLOAT, active INTEGER DEFAULT 1); "
     q += "DROP TABLE IF EXISTS research_reports; "
-    q += "CREATE TABLE research_reports (id INT PRIMARY KEY AUTOINCREMENT, broker TEXT, title TEXT, market_outlook INT, index_target FLOAT, key_tickers TEXT, summary TEXT, downloaded INT DEFAULT 0, published_at DATE); "
+    q += "CREATE TABLE research_reports (id INTEGER PRIMARY KEY AUTOINCREMENT, broker TEXT, title TEXT, market_outlook INTEGER, index_target FLOAT, key_tickers TEXT, summary TEXT, downloaded INTEGER DEFAULT 0, published_at DATE); "
     q += "DROP TABLE IF EXISTS daily_ohlcv; "
-    q += "CREATE TABLE daily_ohlcv (id INT PRIMARY KEY AUTOINCREMENT, ticker TEXT NOT NULL, date DATE NOT NULL, low FLOAT, high FLOAT, open FLOAT, close FLOAT, volume FLOAT, value FLOAT, UNIQUE(ticker,date)); "
+    q += "CREATE TABLE daily_ohlcv (id INTEGER PRIMARY KEY AUTOINCREMENT, ticker TEXT NOT NULL, date DATE NOT NULL, low FLOAT, high FLOAT, open FLOAT, close FLOAT, volume FLOAT, value FLOAT, UNIQUE(ticker,date)); "
     q += "DROP TABLE IF EXISTS news_articles; "
-    q += "CREATE TABLE news_articles (id INT PRIMARY KEY AUTOINCREMENT, headline TEXT NOT NULL, source TEXT, category TEXT, sentiment TEXT, relevance_score INT, published_at DATE, lang CHAR DEFAULT 'en'); "
+    q += "CREATE TABLE news_articles (id INTEGER PRIMARY KEY AUTOINCREMENT, headline TEXT NOT NULL, source TEXT, category TEXT, sentiment TEXT, relevance_score INTEGER, published_at DATE, lang CHAR DEFAULT 'en'); "
     q += "DROP TABLE IF EXISTS entity_mentions; "
-    q += "CREATE TABLE entity_mentions (id INT PRIMARY KEY AUTOINCREMENT, article_id INT, ticker TEXT, company_name TEXT, mention_type TEXT); "
+    q += "CREATE TABLE entity_mentions (id INTEGER PRIMARY KEY AUTOINCREMENT, article_id INTEGER, ticker TEXT, company_name TEXT, mention_type TEXT); "
     q += "DROP TABLE IF EXISTS market_quotes; "
-    q += "CREATE TABLE market_quotes (id INT PRIMARY KEY AUTOINCREMENT, ticker TEXT UNIQUE NOT NULL, name TEXT NOT NULL, exchange CHAR DEFAULT 'HOSE', price FLOAT, pe_ratio FLOAT, pb_ratio FLOAT, mkt_cap FLOAT, sector TEXT, updated_at DATE);"
+    q += "CREATE TABLE market_quotes (id INTEGER PRIMARY KEY AUTOINCREMENT, ticker TEXT UNIQUE NOT NULL, name TEXT NOT NULL, exchange CHAR DEFAULT 'HOSE', price FLOAT, pe_ratio FLOAT, pb_ratio FLOAT, mkt_cap FLOAT, sector TEXT, updated_at DATE);"
     conn.executescript(q.rstrip())
     conn.commit()
 
@@ -44,7 +47,8 @@ def seed_stocks(conn):
         ("GMD", "GameDev VN", "HNX"), ("RE3", "Red River Bev", "HOSE"),
         ("NWP", "Novaland", "HOSE"), ("OHC", "Oho Corp", "HOSE"),
         ("SAB", "Sabeco", "HNX"), ("VPY", "Vinhomes Prop Co.", "UPCoM"),
-        ("HMX", "Hemex Pharma", "HOSE")],
+        ("HMX", "Hemex Pharma", "HOSE")]
+    conn.execute("DELETE FROM market_quotes")
     now = date.today().isoformat()
     for tkr, nm, ex in tkr_list:
         px = round(random.randint(15000, 130000) * (1 + random.uniform(-0.04, 0.05)), -2)
@@ -53,6 +57,7 @@ def seed_stocks(conn):
                         "sector,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
                         (tkr,nm,ex,px,12.5,2.3, random.randint(20,150),
                          "Banking", now))
+    conn.commit()
     return len(tkr_list)
 
 
@@ -67,7 +72,7 @@ def seed_news(conn):
         "GVC cong bao tai chinh Q2/2026 loi nhuan tang 15%",
         "VN-Index vut dinh lich su 1,300 diem voi khop luong ca ky",
         "SSI va HCM dong lot tang target chi so len 1,400 dim",
-        "NNVV tiep tuc noi long chin sach ho tang truong kinh te"],
+        "NNVV tiep tuc noi long chin sach ho tang truong kinh te"]
     conn.execute("DELETE FROM news_articles")
     cur = conn.cursor()
     for i, hl in enumerate(news):
@@ -78,6 +83,7 @@ def seed_news(conn):
                          "source, category, sentiment, relevance_score"
                          ", published_at) VALUES(?,?,?,?,?,?,?)",
                          (i+1, hl[:200], "VNews", "VN Market", sen, rs, pub))
+    conn.commit()
     return len(news)
 
 
@@ -95,12 +101,12 @@ def seed_ohlcv(conn):
             opn    = round(cur_ * random.uniform(0.98, 1.02))
             lwr    = round(min(opn, cur_) * 0.98)
             vol     = int(random.randint(500000, 8000000))
-            sid     = off * 10 + ord(tkr[-1])
-            conn.execute("INSERT INTO daily_ohlcv(id,"
-                             "ticker,date,low,open,"
-                             "close,volume,value) VALUES(?,?,?,?,?,?,?,?)",
-                            (sid,tkr,d.isoformat(),lwr,opn,cur_,vol,vol*cur_*1e-6))
+            conn.execute("INSERT INTO daily_ohlcv(ticker,"
+                              "date,low,open,"
+                              "close,volume,value) VALUES(?,?,?,?,?,?,?)",
+                             (tkr,d.isoformat(),lwr,opn,cur_,vol,vol*cur_*1e-6))
             total += 1
+    conn.commit()
     return total
 
 
@@ -109,7 +115,7 @@ def seed_reports(conn):
         ("SSI","Weekly Chart Jun 26",0,1380.0,"MBB,ACB,VHM"),
         ("HCM","Macro Economy H2/2026",1,1350.0,"VIC,MSN,GVC"),
         ("VCI", "Real E State Revival",0,None,"PAC,VHM"),
-        ("TCBS","Stock Picks Q3 Tech",0,1420.0,"FPT,MSN,MBB")],
+        ("TCBS","Stock Picks Q3 Tech",0,1420.0,"FPT,MSN,MBB")]
     summaries = [
         "VN-Index tiep tuc tang manh trong tuan qua.",
         "Growth remains strong but watch inflation closely.",
@@ -126,6 +132,7 @@ def seed_reports(conn):
                         " VALUES(?,?,?,?,?,?,?)",
                         (br, tle[:80], klt, tgt,
                         ktkrs[:50] if ktkrs else None, s, pub))
+    conn.commit()
     return conn.execute("SELECT COUNT(*) FROM research_reports").fetchone()[0]
 
 

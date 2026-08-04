@@ -39,6 +39,8 @@ class Database:
         # Auto-recovery: check integrity on startup, attempt repair if needed
         self._attempt_recovery()
         self.init_db()
+        # Bind orphan methods (indent broken in this file) so they act as instance methods
+        _bind_orphans(self)
 
     def _attempt_recovery(self):
         """Check DB integrity and attempt auto-recovery if corrupted."""
@@ -565,3 +567,402 @@ class Database:
                 pass
         totals["total"] = total_articles
         return totals
+
+     # ---- CMS / Manual Articles ----------------------------------------------
+
+    def init_cms_table(self):
+        """Create articles table if it does not already exist."""
+        with self._db_lock:
+            self._c().executescript("""
+                CREATE TABLE IF NOT EXISTS cms_articles (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title       TEXT    NOT NULL,
+                    slug        TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+                    content     TEXT    NOT NULL DEFAULT '',
+                    category    TEXT    NOT NULL DEFAULT 'general',
+                    featured_image TEXT DEFAULT '',
+                    tags        TEXT    DEFAULT '',
+                    status      TEXT    NOT NULL DEFAULT 'published',   -- published | draft
+                    view_count  INTEGER NOT NULL DEFAULT 0,
+                    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+            self._conn.commit()
+
+    def save_article(self, slug, title, content, category='general', featured_image='', tags=None, article_id=None):
+        """Create or update a CMS article. Returns the article id."""
+        with self._db_lock:
+            c = self._c()
+            now = _utc_now_iso()
+            tags_json = json.dumps(tags or [])
+            if article_id:
+                c.execute("""
+                    UPDATE cms_articles SET
+                        title=?, content=?, category=?, featured_image=?,
+                        tags=?, updated_at=? WHERE id=?
+                """, (title, content, category, featured_image, tags_json, now, int(article_id)))
+                return int(article_id)
+            # New article
+            c.execute("""
+                INSERT INTO cms_articles (slug, title, content, category, featured_image, tags, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, 'published', ?, ?)
+            """, (slug, title, content, category, featured_image, tags_json, now, now))
+            return c.lastrowid
+
+    def get_all_published_articles(self):
+        """Return all published articles ordered by created_at desc."""
+        return [dict(r) for r in self._c().execute(
+            "SELECT id, slug, title, category, featured_image, tags, status, view_count, updated_at FROM cms_articles WHERE status='published' ORDER BY updated_at DESC"
+        ).fetchall()]
+
+    def get_article_by_slug(self, slug):
+        """Return a single published article by slug, incrementing view_count."""
+        c = self._c()
+        r = c.execute(
+            "SELECT * FROM cms_articles WHERE slug=? AND status='published'", (slug,)
+        ).fetchone()
+        if r:
+            c.execute("UPDATE cms_articles SET view_count=view_count+1 WHERE id=?", (r['id'],))
+            self._conn.commit()
+            d = dict(r)
+            try:
+                d['tags'] = json.loads(d.get('tags', '[]'))
+            except Exception:
+                d['tags'] = []
+            return d
+        return None
+
+    def get_article_by_id(self, article_id):
+        """Return a single CMS article by ID (any status)."""
+        r = self._c().execute(
+            "SELECT * FROM cms_articles WHERE id=?", (int(article_id),)
+        ).fetchone()
+        if r:
+            d = dict(r)
+            try:
+                d['tags'] = json.loads(d.get('tags', '[]'))
+            except Exception:
+                d['tags'] = []
+            return d
+        return None
+
+    def update_article_status(self, article_id, status):
+        """Update the status (published/draft) of an article."""
+        if status not in ('published', 'draft'):
+            return False
+        with self._db_lock:
+            c = self._c()
+            now = _utc_now_iso()
+            c.execute("UPDATE cms_articles SET status=?, updated_at=? WHERE id=?", (status, now, int(article_id)))
+            self._conn.commit()
+            return c.rowcount > 0
+
+    def delete_article(self, article_id):
+        """Delete an article by ID."""
+        with self._db_lock:
+            c = self._c()
+            c.execute("DELETE FROM cms_articles WHERE id=?", (int(article_id),))
+            self._conn.commit()
+            return c.rowcount > 0
+
+
+# -- Orphan method binder (fixes indent-broken methods further down) --
+# Binds module-level orphan functions into Database instance methods via MethodType
+
+def _bind_orphans(db_instance):
+    mod = sys.modules[__name__]
+    orphan_names = [
+         'init_research_tables',
+         'save_research_item',
+         'get_research_items',
+         'get_research_item_by_url',
+         'delete_research_item',
+         'add_backlog_task',
+         'get_backlog_tasks',
+         'in_progress',
+         'update_backlog_task',
+         'complete_backlog_task',
+         'delete_backlog_task',
+         'add_portfolio_transaction',
+         'get_portfolio_transactions',
+         'get_portfolio_holdings',
+         'delete_portfolio_transaction',
+     ]
+    from types import MethodType
+    for name in orphan_names:
+        fn = getattr(mod, name, None)
+        if fn is not None:
+            setattr(db_instance, name, MethodType(fn, db_instance))
+    if hasattr(db_instance, 'init_research_tables'):
+        db_instance.init_research_tables()
+
+
+# ---- Research Intelligence --------------------------------------------------
+
+def init_research_tables(self):
+    """Create research_items and backlog_tasks tables if they do not exist."""
+    with self._db_lock:
+        self._c().executescript("""
+            CREATE TABLE IF NOT EXISTS research_items (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_url   TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+                title        TEXT    NOT NULL,
+                summary      TEXT    NOT NULL DEFAULT '',
+                content      TEXT    NOT NULL DEFAULT '',
+                author       TEXT    DEFAULT '',
+                published_at TEXT    DEFAULT '',
+                research_date TEXT   NOT NULL,
+                tags         TEXT    DEFAULT '[]',
+                status       TEXT    NOT NULL DEFAULT 'processed',
+                created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_research_date ON research_items(research_date DESC);
+            CREATE INDEX IF NOT EXISTS idx_research_url  ON research_items(source_url);
+
+            CREATE TABLE IF NOT EXISTS backlog_tasks (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                research_item_id INTEGER DEFAULT NULL REFERENCES research_items(id),
+                title          TEXT    NOT NULL,
+                description    TEXT    NOT NULL DEFAULT '',
+                priority       TEXT    NOT NULL DEFAULT 'MEDIUM',
+                status         TEXT    NOT NULL DEFAULT 'pending',
+                estimated_hours REAL   DEFAULT 0,
+                notes          TEXT    DEFAULT '',
+                created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                completed_at   TIMESTAMP,
+                updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+             );
+
+            CREATE INDEX IF NOT EXISTS idx_backlog_status ON backlog_tasks(status);
+            CREATE INDEX IF NOT EXISTS idx_backlog_priority ON backlog_tasks(priority);
+            CREATE INDEX IF NOT EXISTS idx_backlight_research ON backlog_tasks(research_item_id);
+
+            CREATE TABLE IF NOT EXISTS portfolio_transactions (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                symbol     TEXT    NOT NULL COLLATE NOCASE,
+                name       TEXT    DEFAULT '',
+                action     TEXT    NOT NULL DEFAULT 'buy',  -- buy / sell
+                quantity   REAL    NOT NULL,
+                price      REAL    NOT NULL,               -- VND per share (x1000 applied)
+                txn_date   TEXT    NOT NULL DEFAULT (date('now')),
+                note       TEXT    DEFAULT '',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+             );
+
+            CREATE INDEX IF NOT EXISTS idx_portfolio_symbol ON portfolio_transactions(symbol);
+            CREATE INDEX IF NOT EXISTS idx_portfolio_date   ON portfolio_transactions(txn_date DESC);
+         """)
+        self._conn.commit()
+
+
+def save_research_item(self, url, title, summary='', content='', author='', tags=None, published_at=''):
+    """Save or update a research item by URL (upsert, thread-safe)."""
+    with self._db_lock:
+        c = self._c()
+        now = _utc_now_iso()
+        tags_json = json.dumps(tags or [])
+        try:
+            c.execute("""
+                INSERT INTO research_items
+                    (source_url, title, summary, content, author, published_at, research_date, tags)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(source_url) DO UPDATE SET
+                    title=excluded.title,
+                    summary=excluded.summary,
+                    content=excluded.content,
+                    author=excluded.author,
+                    published_at=excluded.published_at,
+                    tags=excluded.tags,
+                    updated_at=?
+            """, (url, title, summary, content, author, published_at, now, tags_json, now))
+            self._conn.commit()
+            return c.lastrowid
+        except sqlite3.Error:
+            return 0
+
+
+def get_research_items(self, limit=20, status=None):
+    """Query research items with optional filters."""
+    conditions = ['1=1']
+    params = []
+    if status:
+        conditions.append('status = ?')
+        params.append(status.upper())
+    where = ' AND '.join(conditions)
+    rows = self._c().execute(
+        f'SELECT * FROM research_items WHERE {where} ORDER BY research_date DESC LIMIT ?',
+        params + [limit]
+    ).fetchall()
+    result = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d['tags'] = json.loads(d.get('tags', '[]'))
+        except Exception:
+            d['tags'] = []
+        result.append(d)
+    return result
+
+
+def get_research_item_by_url(self, url):
+    """Get a single research item by source URL."""
+    r = self._c().execute('SELECT * FROM research_items WHERE source_url=?', (url,)).fetchone()
+    if r:
+        d = dict(r)
+        try:
+            d['tags'] = json.loads(d.get('tags', '[]'))
+        except Exception:
+            d['tags'] = []
+        return d
+    return None
+
+
+def delete_research_item(self, item_id):
+    """Delete a research item."""
+    with self._db_lock:
+        c = self._c()
+        c.execute('DELETE FROM backlog_tasks WHERE research_item_id=?', (int(item_id),))
+        c.execute('DELETE FROM research_items WHERE id=?', (int(item_id),))
+        self._conn.commit()
+        return True
+
+
+# ---- Backlog Tasks ----------------------------------------------------------
+
+def add_backlog_task(self, title, description='', priority='MEDIUM', research_item_id=None, estimated_hours=0, notes=''):
+    """Add a task to backlog (thread-safe). Returns task id."""
+    with self._db_lock:
+        c = self._c()
+        try:
+            c.execute("""
+                INSERT INTO backlog_tasks
+                    (research_item_id, title, description, priority, estimated_hours, notes)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (research_item_id, title, description, priority.upper(), estimated_hours, notes))
+            self._conn.commit()
+            return c.lastrowid
+        except sqlite3.Error:
+            return 0
+
+
+def get_backlog_tasks(self, research_item_id=None, status=None, limit=20):
+    """Get backlog tasks with optional filters."""
+    conditions = ['1=1']
+    params = []
+    if research_item_id is not None:
+        conditions.append('research_item_id = ?')
+        params.append(int(research_item_id))
+    if status:
+        conditions.append('status = ?')
+        params.append(status.upper())
+    where = ' AND '.join(conditions)
+    rows = self._c().execute(
+        f'SELECT * FROM backlog_tasks WHERE {where} ORDER BY '
+        "CASE priority WHEN 'CRITICAL' THEN 1 WHEN 'HIGH' THEN 2 WHEN 'MEDIUM' THEN 3 ELSE 4 END, "
+        'created_at DESC LIMIT ?',
+        params + [limit]
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def in_progress(self):
+    """Get tasks currently in_progress."""
+    return self.get_backlog_tasks(status='in_progress')
+
+
+def update_backlog_task(self, task_id, **kwargs):
+    """Update backlog task fields. Returns True if updated."""
+    if not kwargs:
+        return False
+    with self._db_lock:
+        c = self._c()
+        set_parts = []
+        params = []
+        for k, v in kwargs.items():
+            if k in ('title', 'description', 'priority', 'estimated_hours', 'notes', 'status'):
+                set_parts.append(f'{k}=?')
+                params.append(v)
+        if 'status' in kwargs and kwargs['status'] == 'done':
+            set_parts.append('completed_at=?')
+            params.append(_utc_now_iso())
+        set_parts.append('updated_at=?')
+        params.append(_utc_now_iso())
+        params.append(int(task_id))
+        c.execute(f"UPDATE backlog_tasks SET {', '.join(set_parts)} WHERE id=?", params)
+        self._conn.commit()
+        return c.rowcount > 0
+
+
+def complete_backlog_task(self, task_id):
+    """Mark a backlog task as done with timestamp."""
+    return self.update_backlog_task(task_id, status='done')
+
+
+def delete_backlog_task(self, task_id):
+    """Delete a backlog task."""
+    with self._db_lock:
+        self._c().execute('DELETE FROM backlog_tasks WHERE id=?', (int(task_id),))
+        self._conn.commit()
+        return True
+
+# ---- Portfolio Transactions -------------------------------------------------------
+
+def add_portfolio_transaction(self, symbol, action='buy', quantity=0, price=0, name='', txn_date=None, note=''):
+    """Add a buy/sell transaction. Returns transaction id."""
+    with self._db_lock:
+        c = self._c()
+        d = txn_date or datetime.utcnow().strftime('%Y-%m-%d')
+        c.execute(
+            "INSERT INTO portfolio_transactions (symbol, name, action, quantity, price, txn_date, note) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (symbol.upper(), name, action.lower(), float(quantity), float(price), d, note)
+        )
+        self._conn.commit()
+        return c.lastrowid
+
+def get_portfolio_transactions(self, symbol=None, limit=100):
+    """Get transaction history, optionally filtered by symbol."""
+    conditions = []
+    params = []
+    if symbol:
+        conditions.append('symbol = ?')
+        params.append(symbol.upper())
+    where = (' WHERE ' + ' AND '.join(conditions)) if conditions else ''
+    rows = self._c().execute(
+        f'SELECT * FROM portfolio_transactions{where} ORDER BY txn_date DESC, id DESC LIMIT ?',
+        params + [limit]
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+def get_portfolio_holdings(self):
+    """Calculate current holdings: net quantity per symbol, avg buy cost, total invested."""
+    rows = self._c().execute("""
+        SELECT
+            symbol,
+            MAX(name) AS name,
+            SUM(CASE WHEN action='buy'  THEN quantity ELSE -quantity END) AS net_quantity,
+            ROUND(
+                SUM(CASE WHEN action='buy'  THEN quantity * price ELSE 0 END) /
+                NULLIF(ABS(SUM(CASE WHEN action='buy' THEN quantity ELSE 0 END)), 0),
+                2
+            ) AS avg_cost,
+            ROUND(SUM(CASE WHEN action='buy'  THEN quantity * price ELSE 0 END), 2) AS total_bought,
+            ROUND(SUM(CASE WHEN action='sell' THEN quantity * price ELSE 0 END), 2) AS total_sold
+        FROM portfolio_transactions
+        GROUP BY symbol
+        HAVING net_quantity > 0
+        ORDER BY symbol
+    """).fetchall()
+    return [dict(r) for r in rows]
+
+def delete_portfolio_transaction(self, txn_id):
+    """Delete a single transaction by ID."""
+    with self._db_lock:
+        self._c().execute('DELETE FROM portfolio_transactions WHERE id=?', (int(txn_id),))
+        self._conn.commit()
+        return True
+
+# ---- End of file ---

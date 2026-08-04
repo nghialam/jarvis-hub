@@ -1,23 +1,47 @@
 /* ========================================
-   Jarvis Hub 2.0 — Dark Theme CSS (v2)
+   Jarvis Hub 2.0 — Dark/Light Theme CSS (v4)
 ======================================== */
 
 :root {
-    --bg-primary: #0d1117;
-    --bg-secondary: #161b22;
-    --bg-card: #21262d;
-    --bg-card-hover: #292e34;
-    --border-color: #30363d;
-    --text-primary: #f0f6fc;
-    --text-secondary: #8b949e;
-    --text-muted: #6e7681;
-    --accent-green: #3fb950;
-    --accent-red: #f85149;
-    --accent-blue: #58a6ff;
-    --accent-gold: #f0c000;
-    --accent-purple: #d2a8ff;
-    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
-    --radius-md: 8px;
+       --bg-primary: #0d1117;
+       --bg-secondary: #161b22;
+       --bg-card: #21262d;
+       --bg-card-hover: #292e34;
+       --border-color: #30363d;
+       --text-primary: #f0f6fc;
+       --text-secondary: #8b949e;
+       --text-muted: #6e7681;
+       --accent-green: #3fb950;
+       --accent-red: #f85149;
+       --accent-blue: #58a6ff;
+       --accent-gold: #f0c000;
+       --accent-purple: #d2a8ff;
+       --positive-color: #3fb950;
+       --negative-color: #f85149;
+       --primary-color: #58a6ff;
+       --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+       --radius-md: 8px;
+}
+
+/* Light mode overrides */
+[data-theme="light"] {
+       --bg-primary: #ffffff;
+       --bg-secondary: #f6f8fa;
+       --bg-card: #ffffff;
+       --bg-card-hover: #f3f4f6;
+       --border-color: #d0d7de;
+       --text-primary: #1f2328;
+       --text-secondary: #656d76;
+       --text-muted: #8b949e;
+       --accent-green: #1a7f37;
+       --accent-red: #cf222e;
+       --accent-blue: #0969da;
+       --accent-gold: #d29922;
+       --accent-purple: #8250df;
+       --positive-color: #1a7f37;
+       --negative-color: #cf222e;
+       --primary-color: #0969da;
+       --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 * {
@@ -42,6 +66,7 @@ body {
 ::-webkit-scrollbar-track {
     background: transparent;
 }
+
 
 ::-webkit-scrollbar-thumb {
     background: var(--border-color);
@@ -635,5 +660,306 @@ body {
     .filter-bar {
         flex-direction: column;
         align-items: stretch;
+    }
+}
+/* ---- Theme Toggle Button ---- */
+
+.theme-toggle-btn {
+     background: none;
+     border: 1px solid var(--border-color);
+     border-radius: 6px;
+     font-size: 18px;
+     padding: 4px 8px;
+     cursor: pointer;
+     transition: background 0.2s, transform 0.15s;
+     line-height: 1;
+}
+
+.theme-toggle-btn:hover {
+     background: var(--bg-card-hover);
+     transform: scale(1.1);
+}
+
+/* ---- Portfolio P&L Styles ---- */
+
+.stat-card {
+     text-align: center;
+     padding: 16px;
+}
+
+.stat-label {
+     font-size: 12px;
+     color: var(--text-secondary);
+     margin-bottom: 8px;
+     text-transform: uppercase;
+     letter-spacing: 0.5px;
+}
+
+.stat-value {
+     font-size: 24px;
+     font-weight: 700;
+     color: var(--text-primary);
+}
+
+.data-table {
+     width: 100%;
+     border-collapse: collapse;
+     font-size: 13px;
+}
+
+.data-table thead th {
+     text-align: left;
+     padding: 10px 8px;
+     border-bottom: 2px solid var(--border-color);
+     color: var(--text-secondary);
+     font-weight: 600;
+     font-size: 11px;
+     text-transform: uppercase;
+     white-space: nowrap;
+}
+
+.data-table tbody td {
+     padding: 10px 8px;
+     border-bottom: 1px solid var(--border-color);
+     white-space: nowrap;
+}
+
+.data-table tbody tr:hover {
+     background: rgba(255, 255, 255, 0.03);
+}
+
+.symbol-cell {
+     font-weight: 600;
+     color: var(--primary-color);
+}
+
+.badge {
+     display: inline-block;
+     padding: 3px 10px;
+     border-radius: 12px;
+     font-size: 11px;
+     font-weight: 600;
+     text-transform: uppercase;
+}
+
+.badge.positive {
+     background: rgba(16, 185, 129, 0.15);
+     color: #10b981;
+     data-theme-light-color: #1a7f37;
+}
+
+.badge.negative {
+     background: rgba(239, 68, 68, 0.15);
+     color: #ef4444;
+     data-theme-light-color: #cf222e;
+}
+
+.field-label {
+     display: block;
+     font-size: 11px;
+     color: var(--text-secondary);
+     margin-bottom: 4px;
+}
+
+select#pt-action,
+select#txn-filter-action {
+     padding: 8px;
+     border-radius: 6px;
+     border: 1px solid var(--border-color);
+     background: var(--card-bg, var(--bg-card));
+     color: var(--text-primary);
+     font-size: 13px;
+}
+
+.btn-sm {
+     padding: 4px 8px;
+     font-size: 12px;
+     border-radius: 4px;
+     cursor: pointer;
+     border: none;
+     background: rgba(255, 255, 255, 0.08);
+     color: var(--text-primary);
+}
+
+.btn-sm.btn-danger {
+     background: rgba(239, 68, 68, 0.15);
+     color: #ef4444;
+}
+
+.btn-sm:hover {
+     opacity: 0.8;
+}
+
+/* Portfolio table responsive — horizontal scroll on mobile */
+#holdings-container,
+#transactions-container {
+     overflow-x: auto;
+}
+
+/* ---- Enhanced Responsive Breakpoints ---- */
+
+@media (max-width: 768px) {
+       /* Nav tabs: scrollable horizontal row on mobile */
+    .nav-tabs {
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .nav-tab,
+    a.nav-tab {
+        white-space: nowrap;
+        min-width: max-content;
+    }
+
+       /* Portfolio txn form: stack vertically */
+    #txn-form > div {
+        flex-direction: column !important;
+    }
+
+    #txn-form .filter-input,
+    #txn-form select {
+        width: 100% !important;
+    }
+
+       /* Stats cards: 2-col grid */
+    .grid-4#portfolio-summary {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+
+       /* Tables: smaller font + padding */
+    .data-table {
+        font-size: 12px;
+    }
+
+    .data-table thead th,
+    .data-table tbody td {
+        padding: 6px 4px !important;
+    }
+
+       /* Header: compact on mobile */
+    .header {
+        padding: 8px 12px;
+    }
+
+    .header h1 {
+        font-size: 15px;
+    }
+}
+
+@media (max-width: 480px) {
+       /* On tiny screens: tighter grid */
+    .grid-4#portfolio-summary {
+        grid-template-columns: 1fr 1fr !important;
+    }
+
+       /* Hide tab labels, show icons only on tiny screens */
+    .nav-tab > span:not(.tab-icon),
+    a.nav-tab > span:not(.tab-icon) {
+        display: none;
+    }
+
+    .nav-tab {
+        padding: 8px 10px;
+    }
+
+       /* Stat values smaller */
+    .stat-value {
+        font-size: 18px !important;
+    }
+
+    .stat-label {
+        font-size: 10px;
+    }
+}
+
+/* ---- Smooth tab transitions ---- */
+
+.tab-content {
+     animation: fade-in 0.2s ease;
+}
+
+@keyframes fade-in {
+      from { opacity: 0; transform: translateY(6px); }
+      to    { opacity: 1; transform: translateY(0); }
+}
+
+/* ---- Loading spinner ---- */
+
+.spinner {
+     display: inline-block;
+     width: 18px;
+     height: 18px;
+     border: 2px solid var(--border-color);
+     border-top-color: var(--accent-blue);
+     border-radius: 50%;
+     animation: spin 0.8s linear infinite;
+     vertical-align: middle;
+     margin-right: 8px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.loading-text {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 24px;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    min-height: 120px;
+    gap: 16px;
+}
+
+.loading-dots {
+    display: flex;
+    gap: 6px;
+}
+
+.loading-dots span {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent-blue);
+    animation: dot-pulse 1.4s ease-in-out infinite;
+}
+
+.loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+.loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes dot-pulse {
+    0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+    40% { opacity: 1; transform: scale(1.1); }
+}
+
+/* ---- Heatmap grid layout ---- */
+
+.heatmap-grid {
+     display: grid;
+     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+     gap: 8px;
+     padding: 8px 0;
+}
+
+@media (min-width: 768px) {
+    .heatmap-grid {
+         grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    }
+}
+
+@media (min-width: 1200px) {
+    .heatmap-grid {
+         grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     }
 }

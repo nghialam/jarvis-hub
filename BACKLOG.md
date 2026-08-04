@@ -1,60 +1,36 @@
-# BACKLOG — Consolidated 2026-06-26
+# BACKLOG — Jarvis Hub 2.0 — Consolidated & Trimmed [2026-08-01]
 
-## STILL RELEVANT (Action Items)
-| ID | Priority | Category | Title | Status | Notes |
-|---|---|---|---|---|---|
-| S01 | P1 | System | Telegram Network Diagnosis | Open | api.telegram.org unreachable since Jun 5 — user must resolve via VPN/proxy |
-| J20 | P1 | Feature | Jarvis Hub 2.0 Implementation | In Progress | Flask port 8100 unreachable since at least Jun 12; db schema aligned, /logs endpoint working |
-| N01 | P1 | Feature | AI News Sentinel Construction | Open | Phase 1 of dashboard expansion — stalled |
-| S02 | P1 | System | Skill Namespace Normalization | Open | Audit and fix all `openclaw:*` and `finance:*` references to bare strings (supersedes N07) |
-| M03 | P1 | System | Telegram Proxy/VPN Setup | Open | Document and test stable routes for api.telegram.org |
-| DBR01 | P2 | Error | Daily Brief Data — 8 Silent Failures | Open | bd165385f815: zero-byte outputs Jun 25 (14:20-15:18) — root cause: [SILENT] per prompt directive; fix: remove silent fallback, keep at least one data section populated |
-| N02 | P2 | Feature | vnstock4 Migration Completion | Open | Legacy deprecated, imports fail silently |
-| CTX01 | P2 | System | Context Overflow Monitoring | Open | 14,065 token overflow Jun 22 — monitor LCM tuning |
-| M01 | P2 | System | Health Monitoring Cron | Open | Plan: add simple /health cron checker |
-| H01 | P2 | System | Codebase Bloat Cleanup | Open | Prune old .py files from knowledge/scripts/ directories |
-| C04 | P2 | Error | Regression QA Silent Fail | Open | Keep running, verify weekly |
-| N04 | P3 | Macro | Google-SpaceX Compute Deal Tracker | Open | Low priority, keep if useful |
+||| ID | Prio | Category | Title | Status | Notes |
+||---|---|---|---|---|---|
+|| [ARCHIVED S01] | - | System | Telegram Network Diagnosis | Archived | User infrastructure issue, not a code task |
+|| J20 | P1 | Feature | Jarvis Hub 2.0 Implementation | In Progress | Flask dashboard on port 8100; ~60 API routes, 38 DB tables — **Phases A-B done Jul 25, C-E pending** |
+|| N01 | P1 | Feature | AI News Sentinel Construction | Open | Phase 1 of dashboard expansion — stalled |
+|| S02 | P1 | System | Skill Namespace Normalization | Open | Audit `openclaw:*`/`finance:*` refs → bare strings |
+|| [ARCHIVED M03] | - | System | Telegram Proxy/VPN Setup | Archived | Duplicate of S01, not a code task |
+|| [ARCHIVED DBR01] | - | Error | Daily Brief Data — 8 Silent Failures | Archived | Fixed by daily-brief-data.py v17 and cron prompt fix |
+|| C04 | P2 | Error | Regression QA Silent Fail | Open | Keep running, verify weekly |
+|| [ARCHIVED N02] | - | Feature | vnstock4 Migration Completion | Archived | Upgraded vnstock→4.0.5, vnai→2.5.3; integration test passed VIC on 2026-07-25 |
+|| CTX01 | P2 | System | Context Overflow Monitoring | Open | Session overflow Jun 22 — monitor LCM tuning |
+|| M01 | P2 | System | Health Monitoring Cron | Open | Plan: add simple /health cron checker |
+|| H01 | P2 | System | Codebase Bloat Cleanup | Open | Prune old .py from knowledge/scripts/ dirs |
+|| [ARCHIVED IMP01] | - | System | jarvis-auto-improve stub files | Archived | Created ERRORS.md + SESSION_SUMMARY.md on 2026-07-25 |
+|| CRON01 | P2 | Error | Cron Timeout Pattern (memory-daily + backlog-sync) | Open | qwen3.6:35b too slow for 600s deadline — consider migrating to 27b-mxfp8 |
+|| AI01 | P3 | Experiment | Multimodal input pipeline (vision) | Open | Feed charts + text into qwen3.6 via vision variant |
 
-## HISTORY (Closed/Abandoned — no action)
-| ID | Reason |
-|---|---|
-| C_NULL | Cron `model: null` silent failures — fixed Jun 26, migrated to qwen3.6 |
-| C_PQ | Cron prompt quality fixes — normalized step numbering, removed duplicate headers |
-| C02, C05, M02 | Entertainment/Trading pipelines — obsolete, disabled |
-| N05, N06 | Price targets expired, market pipeline disabled |
-| H04, N03 | Memory compact done, WWDC passed |
-| ERR1 | Legacy error, no active code path |
-| L01, L02 | Correlation Engine, Trend Alerts — dead pipelines |
-| F01 | Absorbed into regular backlog intake |
-| C_JB | Daily News Briefing — confirmed running Jun 22-23 (was falsely marked PAUSED) |
-| C03 | Market Eval Report — no active code path |
-| N07 | Duplicated by S02 (Skill Namespace Normalization) |
+--- Daily Autoupdate 2026-07-31 ---
+- System self-audit completed; Health: {flask_8100: unreachable, ollama: not loaded, sqlite_db: ok, git_changes: dirty}
 
----
-- Summary: 12 active items (5 P1, 6 P2, 1 P3) — last sync 2026-06-26 22:00. No new issues this cycle; all MEMORY.md items already tracked.
+--- Daily Autoupdate 2026-08-01 ---
+- Backlog audit complete: **9 active items maintained, 0 new candidates added** (memory scan returned 0 actionable facts; 10 error log entries reviewed — no new backlog items).
+| Third consecutive day of daily collection scans returning zero new facts. Persistently empty pipeline warrants investigation of source logs and fact extraction pipeline health on next opportunity.
 
---- Daily Autoupdate 2026-06-30 ---
-- System self-audit completed
-- Health: {"flask_8100": "unreachable", "ollama": "not loaded", "sqlite_db": "ok", "git_changes": "dirty"}
+--- Daily Autoupdate 2026-08-02 ---
+- Backlog audit complete: **9 active items maintained, 0 new candidates added** (memory scan returned 0 actionable facts; 1 error from ERRORS.md — gotham-brief chunk 2 Telegram 400, pre-existing and tracked as open).
+- Fourth consecutive day of zero new facts from memory collection — fact extraction pipeline health remains degraded. Recommend investigating source log availability or cron timing on next opportunity.
 
---- Daily Autoupdate 2026-07-06 ---
-- System self-audit completed
-- Health: {"flask_8100": "unreachable", "ollama": "not loaded", "sqlite_db": "ok", "git_changes": "clean"}
+|| ARCHIVED / HISTORY |
+|- C_NULL, C_PQ, C02/05, M02, N05/06, H04, N03, ERR1, L01/02, F01, C_JB, C03, N07: Stale/completed/obsolete |
 
---- Daily Autoupdate 2026-07-07 ---
-- System self-audit completed
-- Health: {"flask_8100": "partially reachable (404s on unimplemented routes)", "ollama": "not loaded", "sqlite_db": "ok", "git_changes": "dirty — 47 modified, 5 untracked"}
-
---- Daily Autoupdate 2026-07-08 ---
-- System self-audit completed
-- Health: {"flask_8100": "reachable (200 on /health)", "ollama": "not loaded", "sqlite_db": "ok", "git_changes": "dirty"}
-- No new backlog items; existing P1-P3 status unchanged.
-
---- Daily Autoupdate 2026-07-09 ---
-- System self-audit completed
-- Health: {"flask_8100": "unreachable", "ollama": "not loaded", "sqlite_db": "ok", "git_changes": "dirty"}
-
---- Daily Autoupdate 2026-07-10 ---
+--- Daily Autoupdate 2026-08-03 ---
 - System self-audit completed
 - Health: {"flask_8100": "unreachable", "ollama": "not loaded", "sqlite_db": "ok", "git_changes": "dirty"}

@@ -531,8 +531,11 @@ def analyze_stock(symbol):
                 sys.path.insert(0, str(_venv_path))
         from vnstock.api.quote import Quote as VsQuote
         
+        from datetime import datetime, timedelta
+        _vs_end = datetime.now().strftime("%Y-%m-%d")
+        _vs_start = (datetime.now() - timedelta(days=120)).strftime("%Y-%m-%d")
         q = VsQuote(symbol=symbol, show_log=False)
-        df = q.history(symbol=symbol, start="2026-04-01", end="2026-07-31")
+        df = q.history(symbol=symbol, start=_vs_start, end=_vs_end)
         
         if not df.empty:
             # vnstock returns prices in "nghin dong" * 1000 for actual VND

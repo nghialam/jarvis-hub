@@ -34,13 +34,16 @@ def fetch_stock_quote(symbol: str) -> dict:
         return {"symbol": symbol, "error": "vnstock module not available"}
 
     try:
+        from datetime import datetime, timedelta
+        vs_end = datetime.now().strftime("%Y-%m-%d")
+        vs_start = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d")
         q = Quote(symbol=symbol, show_log=False)
         df = q.history(
             symbol=symbol,
-            start="2026-05-01",
-            end="2026-07-01",
+            start=vs_start,
+            end=vs_end,
             interval="D"
-        )
+         )
 
         if df.empty:
             return {"symbol": symbol, "error": "No data returned"}
@@ -98,13 +101,16 @@ def fetch_market_indices() -> dict:
     data = {}
     for name, vn_symbol in indices.items():
         try:
+            from datetime import datetime, timedelta
+            vs_end = datetime.now().strftime("%Y-%m-%d")
+            vs_start = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d")
             q = Quote(symbol=vn_symbol, show_log=False)
             df = q.history(
                 symbol=vn_symbol,
-                start="2026-05-01",
-                end="2026-07-01", 
+                start=vs_start,
+                end=vs_end,
                 interval="D"
-            )
+              )
 
             if not df.empty:
                 latest = df.tail(1).iloc[0]

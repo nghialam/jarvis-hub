@@ -1595,6 +1595,155 @@ def api_portfolio_watchlist_remove():
         return jsonify({"status": "error", "error": str(e)}), 500
 
 
+# --- Portfolio P&L API ---
+
+@app.route("/api/v1/portfolio/holdings", methods=["GET"])
+def api_portfolio_holdings():
+    """Get current portfolio holdings with net quantity, avg cost, total invested."""
+    try:
+        if db and hasattr(db, "get_portfolio_holdings"):
+            holdings = db.get_portfolio_holdings()
+        else:
+            holdings = []
+        for h in holdings:
+            live_price = _get_cached_price(h['symbol'])
+            qty = float(h.get('net_quantity', 0))
+            avg_cost = float(h.get('avg_cost', 0))
+            h['current_price'] = live_price
+            h['market_value'] = round(live_price * qty, 2) if live_price else 0
+            h['pnl'] = round((live_price - avg_cost) * qty, 2) if (live_price and avg_cost) else 0
+            h['pnl_pct'] = round(((live_price / avg_cost) - 1) * 100, 2) if (live_price and avg_cost) else 0
+        return jsonify({"status": "ok", "count": len(holdings), "holdings": holdings})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/portfolio/transactions", methods=["GET"])
+def api_portfolio_transactions():
+    """Get transaction history, optionally filtered by symbol."""
+    try:
+        symbol = request.args.get("symbol", "").strip().upper() or None
+        limit = int(request.args.get("limit", 100))
+        if db and hasattr(db, "get_portfolio_transactions"):
+            txns = db.get_portfolio_transactions(symbol=symbol, limit=limit)
+        else:
+            txns = []
+        return jsonify({"status": "ok", "count": len(txns), "transactions": txns})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/portfolio/add-txn", methods=["POST"])
+def api_portfolio_add_transaction():
+    """Add a buy/sell transaction."""
+    try:
+        data = request.get_json() or {}
+        symbol = str(data.get("symbol", "")).strip().upper()
+        action = str(data.get("action", "buy")).strip().lower()
+        quantity = float(data.get("quantity", 0))
+        price = float(data.get("price", 0))
+        name = str(data.get("name", "")).strip()
+        txn_date = str(data.get("txn_date", "")).strip() or None
+        note = str(data.get("note", "")).strip()
+        if not symbol or quantity <= 0 or price <= 0:
+            return jsonify({"status": "error", "error": "Missing/invalid required fields"}), 400
+        if action not in ("buy", "sell"):
+            return jsonify({"status": "error", "error": "Action must be buy or sell"}), 400
+        tid = db.add_portfolio_transaction(symbol, action=action, quantity=quantity, price=price, name=name, txn_date=txn_date, note=note)
+        return jsonify({"status": "ok", "transaction_id": tid})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/portfolio/delete-txn/<int:txn_id>", methods=["DELETE"])
+def api_portfolio_delete_transaction(txn_id):
+    """Delete a transaction by ID."""
+    try:
+        db.delete_portfolio_transaction(txn_id)
+        return jsonify({"status": "ok", "transaction_id": txn_id})
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/v1/portfolio/pnl-summary", methods=["GET"])
+def api_portfolio_pnl_summary():
+    """Get overall portfolio P&L summary."""
+    try:
+        if db and hasattr(db, "get_portfolio_holdings"):
+            holdings = db.get_portfolio_holdings()
+        else:
+            holdings = []
+
+        total_cost_basis = 0.0
+        total_current_value = 0.0
+        for h in holdings:
+            cost = float(h.get('total_bought', 0)) - float(h.get('total_sold', 0))
+            qty = float(h.get('net_quantity', 0))
+            avg_cost = float(h.get('avg_cost', 0))
+            live_price = _get_cached_price(h['symbol'])
+
+            h['cost_basis'] = cost
+            h['current_price'] = live_price
+            h['market_value'] = round(live_price * qty, 2) if live_price else 0
+            h['pnl'] = round((live_price - avg_cost) * qty, 2) if live_price else 0
+            h['pnl_pct'] = round(((live_price / avg_cost) - 1) * 100, 2) if (live_price and avg_cost) else 0
+
+            total_cost_basis += cost
+            total_current_value += h['market_value']
+
+        overall_pnl = total_current_value - total_cost_basis
+        overall_pnl_pct = ((total_current_value / total_cost_basis) - 1) * 100 if total_cost_basis else 0
+
+        return jsonify({
+             "status": "ok",
+             "summary": {
+                 "total_cost_basis": round(total_cost_basis, 2),
+                 "total_current_value": round(total_current_value, 2),
+                 "overall_pnl": round(overall_pnl, 2),
+                 "overall_pnl_pct": round(overall_pnl_pct, 2),
+             },
+             "holdings": holdings
+         })
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+def _get_cached_price(symbol):
+    """Try to get cached current price for a symbol."""
+    # Try daily_ohlcv first (has x1000-correct prices)
+    try:
+        row = db._c().execute(
+            "SELECT close FROM daily_ohlcv WHERE ticker=? ORDER BY date DESC LIMIT 1",
+            (symbol,)
+        ).fetchone()
+        if row and float(row[0]) > 0:
+            return float(row[0])
+    except Exception:
+        pass
+    # Try price_history table
+    try:
+        row = db._c().execute(
+            "SELECT close FROM price_history WHERE symbol=? ORDER BY date DESC LIMIT 1",
+            (symbol,)
+        ).fetchone()
+        if row and float(row[0]) > 0:
+            return float(row[0])
+    except Exception:
+        pass
+    # Try market_quotes table (column is 'ticker', not 'symbol') — need x1000 fix
+    try:
+        row = db._c().execute(
+            "SELECT price FROM market_quotes WHERE ticker=? ORDER BY updated_at DESC LIMIT 1",
+            (symbol,)
+        ).fetchone()
+        if row and float(row[0]) > 0:
+            return max(float(row[0]), 1)   # guard against tiny /1000 prices
+    except Exception:
+        pass
+
+    return 0
+
+
 # --- Sector Heatmap API ---
 
 @app.route("/api/v1/market/heatmap", methods=["GET"])
@@ -1929,6 +2078,165 @@ def api_market_intelligence_delete(run_id):
     except Exception as e:
         print("[MI] Delete failed for %d: %s" % (run_id, e))
         return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# =============================================================================
+# CMS — Article Management Routes
+# =============================================================================
+
+@app.route("/api/cms/articles", methods=["GET"])
+def api_cms_articles():
+    """Return all CMS articles or published-only for public view."""
+    try:
+        if not db or not hasattr(db, "get_all_published_articles"):
+            return jsonify({"status": "error", "message": "CMS not available"}), 503
+
+        status = request.args.get("status", "published")
+        category = request.args.get("category", None)
+
+        if status == "all":
+            articles = db.get_all_articles()
+        else:
+            articles = db.get_all_published_articles(category=category)
+
+        return jsonify({
+            "status": "ok",
+            "articles": articles,
+            "count": len(articles),
+        })
+    except Exception as e:
+        print(f"[CMS] GET /api/cms/articles error: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/cms/articles/<int:article_id>", methods=["GET"])
+def api_cms_article_detail(article_id):
+    """Return a single CMS article by ID."""
+    try:
+        if not db or not hasattr(db, "get_article_by_id"):
+            return jsonify({"status": "error", "message": "CMS not available"}), 503
+
+        article = db.get_article_by_id(article_id)
+        if article is None:
+            return jsonify({"status": "error", "message": "Article not found"}), 404
+
+        return jsonify({"status": "ok", "article": article})
+    except Exception as e:
+        print(f"[CMS] GET /api/cms/articles/{article_id} error: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/cms/articles/<int:article_id>", methods=["PUT"])
+def api_cms_article_update(article_id):
+    """Update an existing CMS article."""
+    try:
+        if not db or not hasattr(db, "get_article_by_id"):
+            return jsonify({"status": "error", "message": "CMS not available"}), 503
+
+        existing = db.get_article_by_id(article_id)
+        if existing is None:
+            return jsonify({"status": "error", "message": "Article not found"}), 404
+
+        data = request.get_json()
+        slug = data["slug"] or (existing["slug"].lower().replace(" ", "-"))
+        db.update_article(
+            article_id=article_id,
+            title=data["title"],
+            content=data["content"],
+            summary=data.get("summary", ""),
+            tags=",".join(data.get("tags", [])),
+            slug=slug,
+            category=data.get("category", ""),
+        )
+
+        return jsonify({"status": "ok", "message": "Article updated"})
+    except Exception as e:
+        print(f"[CMS] PUT /api/cms/articles/{article_id} error: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/cms/articles", methods=["POST"])
+def api_cms_article_create():
+    """Create a new CMS article."""
+    try:
+        if not db or not hasattr(db, "get_all_published_articles"):
+            return jsonify({"status": "error", "message": "CMS not available"}), 503
+
+        data = request.get_json()
+        slug = (data.get("slug") or data.get("title", "")).lower().replace(" ", "-")
+
+        article_id = db.create_cms_article(
+            title=data["title"],
+            content=data["content"],
+            summary=data.get("summary", ""),
+            tags=",".join(data.get("tags", [])),
+            slug=slug,
+            category=data.get("category", ""),
+        )
+
+        return jsonify({"status": "ok", "success": True, "id": article_id})
+    except Exception as e:
+        print(f"[CMS] POST /api/cms/articles error: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route("/api/cms/articles/<int:article_id>", methods=["DELETE"])
+def api_cms_article_delete(article_id):
+    """Mark a CMS article as unpublished (soft-delete)."""
+    try:
+        if not db or not hasattr(db, "update_article_status"):
+            return jsonify({"status": "error", "message": "CMS not available"}), 503
+
+        existing = db.get_article_by_id(article_id)
+        if existing is None:
+            return jsonify({"status": "error", "message": "Article not found"}), 404
+
+        db.update_article_status(article_id, status="unpublished")
+        return jsonify({"status": "ok", "message": "Article unpublished"})
+    except Exception as e:
+        print(f"[CMS] DELETE /api/cms/articles/{article_id} error: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# CMS Admin Panel route
+@app.route("/cms")
+def cms_panel():
+    """Admin CMS dashboard for article management."""
+    return render_template("cms.html")
+
+
+# Article view page (public-facing)
+@app.route("/a/<slug>")
+def article_view(slug):
+    """Display a published CMS article with full content."""
+    try:
+        if not db or not hasattr(db, "get_article_by_slug"):
+            return "CMS not available", 503
+
+        article = db.get_article_by_slug(slug)
+        if article is None:
+            return "Article not found", 404
+
+        from markdown import markdown as md
+        from bleach import clean as bleach_clean, ALLOWED_TAGS, ALLOWED_ATTRIBUTES
+
+        raw_html = md(article.get("content", ""))
+        sanitized_html = bleach_clean(
+            raw_html,
+            tags=ALLOWED_TAGS | {"img", "figure", "figcaption", "iframe"},
+            attributes={**ALLOWED_ATTRIBUTES, "img": ["src", "alt", "title"], "iframe": ["src", "allow", "frameborder"]},
+            strip=True,
+        )
+
+        return render_template(
+            "article_page.html",
+            article=article,
+            content=sanitized_html,
+        )
+    except Exception as e:
+        print(f"[CMS] Article view error for {slug}: {e}")
+        return f"Error: {e}", 500
+
 
 # --- Application entry point -------------------------------------------------
 
