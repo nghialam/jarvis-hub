@@ -24,27 +24,27 @@ if start_idx is None or end_idx is None:
 print(f"Replacing lines {start_idx+1} to {end_idx+1}")
 
 new_func = [
-     'def _clean_reasoning_preamble(text):\n',
-     '      """Remove Qwen3.6 reasoning preamble from streaming output."""\n',
-     "    import re\n",
-     "    lines = text.split('\\n')\n",
-     "    skip_patterns = [\n",
-     "         \"here's a thinking process\",\n",
-     '         "let me think about this",\n',
-     '         "i need to analyze",\n',
-     '         "as an ai, i don\\'t have",\n',
-     "     ]\n",
-     "    start_idx = 0\n",
-     "    for line in lines:\n",
-     "        lower = line.lower().strip()\n",
-     "        if any(p in lower for p in skip_patterns):\n",
-     "            start_idx += 1\n",
-     "        else:\n",
-     "            break\n",
-     "    result = '\\n'.join(lines[start_idx:])\n",
-     "    return result.strip() if result.strip() else text\n",
-     "\n",
-     "\n",
+    "def _clean_reasoning_preamble(text):\n",
+    '    """Remove Qwen3.6 reasoning preamble from streaming output."""\n',
+    "    import re\n",
+    "    lines = text.split('\\n')\n",
+    "    skip_patterns = [\n",
+    "        \"here's a thinking process\",\n",
+    '        "let me think about this",\n',
+    '        "i need to analyze",\n',
+    "        \"as an ai, i don't have\",\n",
+    "    ]\n",
+    "    start_idx = 0\n",
+    "    for line in lines:\n",
+    "        lower = line.lower().strip()\n",
+    "        if any(p in lower for p in skip_patterns):\n",
+    "            start_idx += 1\n",
+    "        else:\n",
+    "            break\n",
+    "    result = '\\n'.join(lines[start_idx:])\n",
+    "    return result.strip() if result.strip() else text\n",
+    "\n",
+    "\n",
 ]
 
 new_lines = lines[:start_idx] + new_func + lines[end_idx+1:]
@@ -62,7 +62,7 @@ try:
 except py_compile.PyCompileError as e:
     msg = str(e)
     print(f"✗ BROKEN at line {e.lineno}: {msg}")
-     # Show context lines
+    # Show context lines
     error_line = e.lineno - 1
     for i in range(max(0, error_line-3), min(len(new_lines), error_line+4)):
         marker = " >>>" if i == error_line else "      "

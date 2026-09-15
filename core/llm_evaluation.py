@@ -1,9 +1,13 @@
 """
 LLM Evaluation Pipeline for Jarvis Hub - Tier 2 Auto-Analysis
 
-Uses Qwen3.6:35b-a3b-mxfp8 via Ollama to analyze market data and generate
+Uses the active LLM provider (Ollama or oMLX) to analyze market data and generate
 Vietnamese-language trading insights, sentiment analysis, and strategy briefs.
 
+Switch provider by setting LLM_PROVIDER env var or config.yaml:
+    export LLM_PROVIDER=omlx   # switch to oMLX
+    export LLM_PROVIDER=ollama # switch to Ollama
+    
 Usage:
     python3 llm_evaluation.py [--dry-run]
     
@@ -21,6 +25,9 @@ import time
 import requests
 from datetime import date, datetime
 
+# Import unified LLM client (multi-provider)
+from core.llm_client import llm_call, check_llm_health, get_active_provider
+
 
 # Configuration
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "jarvis_market.db")
@@ -28,8 +35,6 @@ EVALUATION_JSON = os.path.join(
     os.path.dirname(__file__),
     "..", "evaluations", "latest_evaluation.json"
 )
-OLLAMA_URL = "http://localhost:11434"
-LLM_MODEL = "qwen3.6:35b-a3b-mxfp8"
 
 os.makedirs(os.path.dirname(EVALUATION_JSON), exist_ok=True)
 
@@ -75,14 +80,25 @@ def fetch_latest_signals():
         conn.close()
 
 
-def fetch_ollama_status():
+def fetch_llm_status():
+    """Check active LLM provider health using unified client."""
     try:
-        resp = requests.get(f"{OLLAMA_URL}/api/tags", timeout=5)
-        data = resp.json()
-        models = [m.get("name") for m in data.get("models", [])]
-        return {"running": True, "models": models}
+        health = check_llm_health()
+        if health.get("healthy"):
+            return {
+                "running": True,
+                "provider": health.get("provider", "unknown"),
+                "url": health.get("url", ""),
+                "models": health.get("models", []),
+            }
+        return {
+            "running": False,
+            "provider": health.get("provider", "unknown"),
+            "url": health.get("url", ""),
+            "models": [],
+        }
     except Exception:
-        return {"running": False, "models": []}
+        return {"running": False, "provider": "unknown", "url": "", "models": []}
 
 
 # ---------------------------------------------------------------
@@ -123,10 +139,11 @@ def build_evaluation_prompt(market_data, signals):
     else:
         sig_lines.append("_Chưa có tín hiệu mới._")
 
-    ollama = fetch_ollama_status()
+    llm_status = fetch_llm_status()
+    provider_name = llm_status.get("provider", "unknown")
     oll_text = (
-        f"- Ollama: {'OK' if ollama['running'] else 'DOWN'} | "
-        f"Models: {', '.join(ollama.get('models', []))}"
+        f"- {provider_name.title()}: {'OK' if llm_status['running'] else 'DOWN'} | "
+        f"Models: {', '.join(llm_status.get('models', []))}"
     )
 
     prompt = f"""Bạn là nhà phân tích chứng khoán VN chuyên nghiệp,
@@ -153,59 +170,27 @@ Viết tiếng Việt tự nhiên, chuyên nghiệp, bullet point ngắn gọn."
 
 
 # ---------------------------------------------------------------
-# Call Ollama (streaming)
+# Call active LLM provider (unified via llm_client)
 # ---------------------------------------------------------------
 
-def call_ollama(prompt, max_retries=2):
-    payload = {
-        "model": LLM_MODEL,
-        "messages": [
-            {"role": "system",
-             "content": "Bạn là nhà phân tích CK VN 15 năm kinh nghiệm."},
-            {"role": "user", "content": prompt},
-        ],
-        "stream": True,
-        "options": {"num_predict": 4096, "temperature": 0.7, "top_p": 0.9},
-    }
-
+def call_llm(prompt, max_retries=2):
+    """Call the active LLM provider (Ollama or oMLX) via unified client."""
     for attempt in range(1, max_retries + 1):
         print(f" [LLM] Attempt {attempt}/{max_retries}...")
         try:
-            resp = requests.post(
-                f"{OLLAMA_URL}/api/chat",
-                json=payload,
+            result = llm_call(
+                prompt,
+                system_prompt="Bạn là nhà phân tích CK VN 15 năm kinh nghiệm.",
                 timeout=300,
-                stream=True,
+                max_tokens=4096,
+                temperature=0.7,
             )
-
-            if resp.status_code != 200:
-                print(f" [LLM] HTTP {resp.status_code}: "
-                      f"{resp.text[:200]}")
-                continue
-
-            full_text = ""
-            for line in resp.iter_lines():
-                if not line or not line.strip():
-                    continue
-                try:
-                    chunk = json.loads(line.decode("utf-8"))
-                    delta_msg = chunk.get("message", {})
-                    content = delta_msg.get("content", "")
-
-                    # Fallback for some models that use 'delta' directly
-                    if not content and "delta" in chunk:
-                        print(f" [LLM] Using 'delta' field")
-
-                    full_text += content
-
-                except json.JSONDecodeError as e:
-                    print(f"[LLM] JSON parse error: {e}, skipping line")
-
-            if full_text.strip():
-                return full_text.strip()
-
+            if result:
+                return result
+            print(f" [LLM] Empty response on attempt {attempt}")
         except requests.exceptions.ConnectionError:
-            print("[LLM] Connection refused. Is Ollama running?")
+            provider = get_active_provider()
+            print(f"[LLM] Connection refused for {provider}. Is it running?")
             time.sleep(3)
         except requests.exceptions.Timeout:
             print("[LLM] Timeout after 5 minutes")
@@ -261,8 +246,8 @@ def main():
         print(f"[ERROR] Building prompt: {e}")
         return
 
-    print("[STEP 3] Calling Qwen3.6 via Ollama...")
-    result = call_ollama(prompt)
+    print(f"[STEP 3] Calling Qwen3.6 via {get_active_provider()}...")
+    result = call_llm(prompt)
 
     if not result:
         print("[WARN] No LLM output -- pipeline finished. "

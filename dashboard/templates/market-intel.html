@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Market Intelligence — Jarvis Hub 2.0</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/subpages.css">
+</head>
+
+<body>
+    <div class="header">
+        <h1>⚡ Jarvis Hub 2.0</h1>
+        <div class="header-meta">
+            <button class="theme-toggle-btn" id="theme-toggle" onclick="toggleTheme()"
+                title="Toggle dark/light mode">🌙</button>
+            <div class="freshness">
+                <span class="freshness-dot" id="freshness-dot"></span>
+                <span id="freshness-text">Loading...</span>
+            </div>
+        </div>
+    </div>
+
+    {% include 'partials/breadcrumb.html' %}
+
+    <div class="page-header">
+        <h2>🧠 Market Intelligence</h2>
+        <button class="btn btn-primary" id="mi-run-btn" onclick="runMarketIntelligencePipeline()">▶ Run Pipeline
+            Now</button>
+    </div>
+
+    <div class="subpage-content">
+        <!-- MI Filters -->
+        <div class="filter-bar" id="mi-filters">
+            <button class="filter-btn active" data-action="latest" onclick="setMiAction('latest')">Latest Brief</button>
+            <button class="filter-btn" data-action="history" onclick="setMiAction('history')">History</button>
+            <button class="filter-btn" data-action="sentiment" onclick="setMiAction('sentiment')">Sentiment</button>
+        </div>
+
+        <div id="mi-loading" class="loading" style="display:none">Loading Market Intelligence data</div>
+        <div id="mi-status" class="mi-status-bar" style="display:none"></div>
+
+        <!-- Latest Brief -->
+        <div id="mi-latest-container">
+            <div class="empty-state">Loading latest intelligence...</div>
+        </div>
+
+        <!-- History -->
+        <div id="mi-history-container" style="display:none;">
+            <div class="empty-state">Loading history...</div>
+        </div>
+
+        <!-- Sentiment Distribution -->
+        <div id="mi-sentiment-container" style="display:none;">
+            <div class="empty-state">Loading sentiment data...</div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/subpages.js"></script>
+    <script src="/static/js/async_tasks.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            loadMarketIntelligence();
+            checkHealth();
+        });
+    </script>
+</body>
+
+</html>

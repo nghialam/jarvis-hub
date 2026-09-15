@@ -7,10 +7,21 @@ telegram:
   target_chat_id: "1670013239"
   openclaw_path: "/opt/homebrew/bin/openclaw"
 
-ollama:
-  url: "http://localhost:11434"
-  model: "qwen3.6:35b-a3b-mxfp8"
-  api_key: ""
+# --- LLM multi-provider config ---
+# Switch active provider: set LLM_PROVIDER=omlx or LLM_PROVIDER=ollama (env var)
+# Or change "provider" below. Falls back to "ollama" if omitted (backward compat).
+llm:
+  provider: "omlx"
+  omlx:
+    base_url: "http://localhost:8000/v1"
+    model: "Qwen3.6-35B-A3B-MLX-8bit"
+    api_key: ""
+    timeout: 120
+  ollama:
+    url: "http://localhost:11434"
+    model: "qwen3.6:35b-a3b-mxfp8"
+    api_key: ""
+    timeout: 60
 
 feed:
   sources:
@@ -68,5 +79,8 @@ schedule:
   morning_briefing: "06:18"   # GMT+7
   evening_briefing: "23:00"   # GMT+7
 
-db_path: "~/jarvis-hub/knowledge/jarvis.db"
-daily_dir: "~/jarvis-hub/daily"
+# --- Database config (JH3.0 consolidated) ---
+db:
+  path: "data/jarvis.db"  # Relative to project root
+  journal_mode: "WAL"
+  timeout: 30

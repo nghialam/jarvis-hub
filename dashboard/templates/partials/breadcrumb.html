@@ -1,0 +1,19 @@
+{% block breadcrumb %}
+<nav class="breadcrumb" aria-label="Breadcrumb">
+    <ol class="breadcrumb-list">
+        <li class="breadcrumb-item">
+            <a href="/hub2" class="breadcrumb-link">🏠 Hub</a>
+        </li>
+        {% for item in breadcrumbs %}
+        <li class="breadcrumb-separator">›</li>
+        <li class="breadcrumb-item{% if loop.last %} breadcrumb-current{% endif %}">
+            {% if loop.last %}
+                {{ item.label }}
+            {% else %}
+                <a href="{{ item.href }}" class="breadcrumb-link">{{ item.label }}</a>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ol>
+</nav>
+{% endblock %}

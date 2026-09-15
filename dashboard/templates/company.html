@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Company News — Jarvis Hub 2.0</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/subpages.css">
+</head>
+
+<body>
+    <div class="header">
+        <h1>⚡ Jarvis Hub 2.0</h1>
+        <div class="header-meta">
+            <button class="theme-toggle-btn" id="theme-toggle" onclick="toggleTheme()"
+                title="Toggle dark/light mode">🌙</button>
+            <div class="freshness">
+                <span class="freshness-dot" id="freshness-dot"></span>
+                <span id="freshness-text">Loading...</span>
+            </div>
+        </div>
+    </div>
+
+    {% include 'partials/breadcrumb.html' %}
+
+    <div class="page-header">
+        <h2>🏢 Company News</h2>
+    </div>
+
+    <div class="subpage-content">
+        <!-- Search -->
+        <div class="filter-bar">
+            <input type="text" class="filter-input" id="company-search" placeholder="Search ticker or company name..."
+                onkeyup="debounceSearch()" style="flex:1;">
+        </div>
+
+        <div id="company-results">
+            <div class="empty-state">Search for a company to view its news and events.</div>
+        </div>
+
+        <div id="company-news-feed" style="margin-top: 20px;"></div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/subpages.js"></script>
+    <script src="/static/js/async_tasks.js"></script>
+</body>
+
+</html>

@@ -4,307 +4,627 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jarvis Hub 2.0 — Market Intelligence</title>
+    <title>Jarvis Hub 2.0 — Dashboard</title>
     <link rel="stylesheet" href="/static/css/style.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <style>
+        /* Hub Landing Page Styles */
+        .hub-landing {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Breadcrumb */
+        .breadcrumb {
+            margin-bottom: 24px;
+        }
+
+        .breadcrumb-list {
+            list-style: none;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            margin: 0;
+            padding: 0;
+        }
+
+        .breadcrumb-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .breadcrumb-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 14px;
+            transition: color 0.2s;
+        }
+
+        .breadcrumb-link:hover {
+            color: var(--accent);
+        }
+
+        .breadcrumb-separator {
+            color: var(--text-muted);
+            font-size: 12px;
+        }
+
+        .breadcrumb-current {
+            color: var(--text-primary);
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        /* Hero Section */
+        .hub-hero {
+            background: linear-gradient(135deg, var(--panel-bg), var(--accent) 50%, var(--accent-hover));
+            border-radius: 16px;
+            padding: 32px;
+            margin-bottom: 32px;
+            color: white;
+        }
+
+        .hub-hero h1 {
+            margin: 0 0 8px 0;
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .hub-hero p {
+            margin: 0;
+            opacity: 0.9;
+            font-size: 15px;
+        }
+
+        /* Overview Cards Grid */
+        .hub-overview {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .hub-card {
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 24px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+
+        .hub-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 212, 170, 0.1);
+        }
+
+        .hub-card-icon {
+            font-size: 32px;
+            margin-bottom: 12px;
+        }
+
+        .hub-card h3 {
+            margin: 0 0 8px 0;
+            font-size: 18px;
+            color: var(--text-primary);
+        }
+
+        .hub-card p {
+            margin: 0 0 16px 0;
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        .hub-card-stats {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .hub-stat {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .hub-stat-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .hub-stat-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Quick Actions */
+        .hub-quick-actions {
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 32px;
+        }
+
+        .hub-quick-actions h2 {
+            margin: 0 0 16px 0;
+            font-size: 20px;
+        }
+
+        .hub-actions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+        }
+
+        .hub-action-btn {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+            color: var(--text-primary);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .hub-action-btn:hover {
+            border-color: var(--accent);
+            background: var(--accent);
+            color: white;
+        }
+
+        .hub-action-btn .action-icon {
+            font-size: 20px;
+        }
+
+        .hub-action-btn .action-text {
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        /* Live Status */
+        .hub-live-status {
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 24px;
+        }
+
+        .hub-live-status h2 {
+            margin: 0 0 16px 0;
+            font-size: 20px;
+        }
+
+        .hub-status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px;
+        }
+
+        .hub-status-item {
+            text-align: center;
+            padding: 16px;
+            background: var(--bg-primary);
+            border-radius: 8px;
+        }
+
+        .hub-status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin: 0 auto 8px;
+        }
+
+        .hub-status-indicator.online {
+            background: #10b981;
+            box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+        }
+
+        .hub-status-indicator.offline {
+            background: #ef4444;
+        }
+
+        .hub-status-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .hub-status-value {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-top: 4px;
+        }
+
+        /* Sub-page specific styles */
+        .sub-page {
+            display: none;
+        }
+
+        .sub-page.active {
+            display: block;
+        }
+
+        .page-header {
+            margin-bottom: 24px;
+        }
+
+        .page-header h1 {
+            margin: 0 0 8px 0;
+            font-size: 24px;
+        }
+
+        .page-header p {
+            margin: 0;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        @media (max-width: 768px) {
+            .hub-overview {
+                grid-template-columns: 1fr;
+            }
+
+            .hub-hero {
+                padding: 24px;
+            }
+
+            .hub-hero h1 {
+                font-size: 24px;
+            }
+        }
+    </style>
 </head>
 
 <body>
-
-    <!-- Header -->
-    <div class="header">
-        <h1>⚡ Jarvis Hub 2.0</h1>
-        <div class="header-meta">
-            <button class="theme-toggle-btn" id="theme-toggle" onclick="toggleTheme()" title="Toggle dark/light mode">🌙</button>
-            <div class="freshness">
-                <span class="freshness-dot" id="freshness-dot"></span>
-                <span id="freshness-text">Loading...</span>
-            </div>
+    <!-- Sidebar -->
+    <div class="app-sidebar">
+        <div class="sidebar-header">
+            <h2>🔮 Jarvis Hub</h2>
         </div>
+        <nav class="sidebar-nav">
+            <a href="/hub2" class="nav-link active">
+                <span class="nav-icon">🏠</span>
+                <span>Hub Home</span>
+            </a>
+            <a href="/hub2/market" class="nav-link">
+                <span class="nav-icon">📊</span>
+                <span>Market</span>
+            </a>
+            <a href="/hub2/news" class="nav-link">
+                <span class="nav-icon">📰</span>
+                <span>News</span>
+            </a>
+            <a href="/hub2/company" class="nav-link">
+                <span class="nav-icon">🏢</span>
+                <span>Company</span>
+            </a>
+            <a href="/hub2/research" class="nav-link">
+                <span class="nav-icon">📑</span>
+                <span>Research</span>
+            </a>
+            <a href="/hub2/screener" class="nav-link">
+                <span class="nav-icon">🔍</span>
+                <span>Screener</span>
+            </a>
+            <a href="/hub2/market-intel" class="nav-link">
+                <span class="nav-icon">🧠</span>
+                <span>Market Intel</span>
+            </a>
+            <a href="/hub2/portfolio" class="nav-link">
+                <span class="nav-icon">💼</span>
+                <span>Portfolio</span>
+            </a>
+        </nav>
     </div>
 
-    <!-- Navigation Tabs -->
-    <div class="nav-tabs">
-        <div class="nav-tab active" data-tab="market" onclick="switchTab('market')">
-            <span class="tab-icon">📊</span> Market Overview
-        </div>
-        <div class="nav-tab" data-tab="news" onclick="switchTab('news')">
-            <span class="tab-icon">📰</span> News Aggregator
-        </div>
-        <div class="nav-tab" data-tab="company" onclick="switchTab('company')">
-            <span class="tab-icon">🏢</span> Company News
-        </div>
-        <div class="nav-tab" data-tab="research" onclick="switchTab('research')">
-            <span class="tab-icon">📈</span> Research Reports
-        </div>
-        <div class="nav-tab" data-tab="screener" onclick="switchTab('screener')">
-            <span class="tab-icon">⚙️</span> Watchlist & Screener
-        </div>
-        <div class="nav-tab" data-tab="mi" onclick="switchTab('mi')">
-            <span class="tab-icon">🧠</span> Market Intelligence
-        </div>
-        <div class="nav-tab" data-tab="portfolio" onclick="switchTab('portfolio')">
-            <span class="tab-icon">💼</span> Portfolio
-        </div>
-        <a href="/cms" class="nav-tab" style="text-decoration:none;color:inherit;">
-            <span class="tab-icon">📝</span> CMS
-        </a>
-    </div>
+    <!-- Main Content -->
+    <div class="app-main">
+        <div class="app-content">
+            <!-- Hub Landing Page -->
+            <div id="hub-landing" class="sub-page active">
+                <div class="hub-landing">
+                    <!-- Breadcrumb -->
+                    <nav class="breadcrumb" aria-label="Breadcrumb">
+                        <ol class="breadcrumb-list">
+                            <li class="breadcrumb-item">
+                                <a href="/hub2" class="breadcrumb-link">🏠 Hub Home</a>
+                            </li>
+                        </ol>
+                    </nav>
 
-    <!-- Main Content Container -->
-    <div class="main-content">
-
-        <!-- ==================== TAB 1: MARKET OVERVIEW ==================== -->
-        <div id="tab-market" class="tab-content active">
-            <div class="filter-bar" id="market-filters">
-                <button class="filter-btn active" data-period="week" onclick="setMarketPeriod('week')">Week</button>
-                <button class="filter-btn" data-period="month" onclick="setMarketPeriod('month')">Month</button>
-                <button class="filter-btn" data-period="quarter" onclick="setMarketPeriod('quarter')">Quarter</button>
-                <span style="margin-left: auto;">
-                    <button class="btn btn-secondary" id="refresh-market-btn" onclick="loadMarketOverview()">🔄 Refresh
-                        Market</button>
-                </span>
-            </div>
-
-            <div id="market-loading" class="loading" style="display:none">Loading market data</div>
-
-            <!-- Daily Snapshot Cards -->
-            <h3 class="section-title">DAILY SNAPSHOT</h3>
-            <div class="grid-4" id="daily-snapshot-grid">
-                <div class="empty-state">Loading...</div>
-            </div>
-
-            <!-- VN Indices -->
-            <h3 class="section-title">VIETNAMESE INDICES</h3>
-            <div class="grid-3" id="vn-indices-grid">
-                <div class="empty-state">Loading...</div>
-            </div>
-
-            <!-- Global Indices -->
-            <h3 class="section-title">GLOBAL INDICES</h3>
-            <div class="grid-4" id="global-indices-grid">
-                <div class="empty-state">Loading...</div>
-            </div>
-
-            <!-- Crypto & Gold -->
-            <h3 class="section-title">CRYPTO & COMMODITIES</h3>
-            <div class="grid-5">
-                <div id="crypto-grid"></div>
-                <div id="gold-container"></div>
-            </div>
-
-            <!-- Sector Heatmap -->
-            <h3 class="section-title">SECTOR HEATMAP</h3>
-            <div id="sector-heatmap-container">
-                <div class="empty-state">Loading sector data...</div>
-            </div>
-
-            <!-- Top Movers -->
-            <h3 class="section-title">TOP MOVERS</h3>
-            <div id="top-motions-container">
-                <div class="empty-state">Loading top movers...</div>
-            </div>
-        </div>
-
-        <!-- ==================== TAB 2: NEWS AGGREGATOR ==================== -->
-        <div id="tab-news" class="tab-content">
-            <div class="filter-bar" id="news-filters">
-                <button class="filter-btn active" data-category="all" onclick="setNewsCategory('all')">All</button>
-                <button class="filter-btn" data-category="vn-market" onclick="setNewsCategory('vn-market')">VN
-                    Market</button>
-                <button class="filter-btn" data-category="vn-business" onclick="setNewsCategory('vn-business')">Business</button>
-                <button class="filter-btn" data-category="global-business" onclick="setNewsCategory('global-business')">Global</button>
-                <button class="filter-btn" data-category="vn-tech" onclick="setNewsCategory('vn-tech')">Tech</button>
-                <span style="margin-left: auto;">
-                    <button class="btn btn-secondary" id="refresh-news-btn" onclick="refreshNews()">🔄 Refresh
-                        News</button>
-                </span>
-            </div>
-
-            <div id="news-loading" class="loading" style="display:none">Loading news</div>
-
-            <!-- Featured / Trending -->
-            <div id="news-featured"></div>
-
-            <!-- News List -->
-            <div id="news-list">
-                <div class="empty-state">Loading news articles...</div>
-            </div>
-        </div>
-
-        <!-- ==================== TAB 3: COMPANY NEWS ==================== -->
-        <div id="tab-company" class="tab-content">
-            <div class="filter-bar">
-                <input type="text" class="filter-input" id="company-search"
-                    placeholder="Search ticker or company name..." onkeyup="debounceSearch()">
-            </div>
-
-            <div id="company-results">
-                <div class="empty-state">Search for a company to view its news and events.</div>
-            </div>
-
-            <div id="company-news-feed" style="margin-top: 20px;"></div>
-        </div>
-
-        <!-- ==================== TAB 4: RESEARCH REPORTS ==================== -->
-        <div id="tab-research" class="tab-content">
-            <div class="filter-bar" id="research-filters">
-                <button class="filter-btn active" data-broker="all" onclick="setResearchBroker('all')">All
-                    Brokers</button>
-                <button class="filter-btn" data-broker="SSI" onclick="setResearchBroker('SSI')">SSI</button>
-                <button class="filter-btn" data-broker="VCI" onclick="setResearchBroker('VCI')">VCI</button>
-                <button class="filter-btn" data-broker="HCM" onclick="setResearchBroker('HCM')">HCM</button>
-                <button class="filter-btn" data-broker="TCBS" onclick="setResearchBroker('TCBS')">TCBS</button>
-                <button class="filter-btn" data-broker="VCBS" onclick="setResearchBroker('VCBS')">VCBS</button>
-                <span style="margin-left: auto;">
-                    <button class="btn btn-secondary" id="crawl-btn" onclick="crawlResearch()">🕷️ Crawl
-                        Brokers</button>
-                </span>
-            </div>
-
-            <div id="research-loading" class="loading" style="display:none">Loading reports</div>
-
-            <!-- Broker Stats -->
-            <div id="research-stats"></div>
-
-            <!-- Reports Grid -->
-            <div id="research-list">
-                <div class="empty-state">Loading research reports...</div>
-            </div>
-        </div>
-
-        <!-- ==================== TAB 5: WATCHLIST & SCREENER ==================== -->
-        <div id="tab-screener" class="tab-content">
-            <div id="screener-loading" class="loading" style="display:none">Loading watchlist</div>
-
-            <!-- Add to Watchlist -->
-            <div class="card" style="margin-bottom: 20px;">
-                <div class="card-head">
-                    <span class="card-title">➕ Add to Watchlist</span>
-                </div>
-                <div class="card-body">
-                    <div style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;">
-                        <div>
-                            <label style="display: block; font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">Ticker</label>
-                            <input type="text" class="filter-input" id="wl-symbol" placeholder="e.g. VNM"
-                                style="width: 100px;">
-                        </div>
-                        <div>
-                            <label style="display: block; font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">Name
-                                (optional)</label>
-                            <input type="text" class="filter-input" id="wl-name" placeholder="Company name"
-                                style="width: 180px;">
-                        </div>
-                        <div>
-                            <label style="display: block; font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">Sector
-                                (optional)</label>
-                            <input type="text" class="filter-input" id="wl-sector" placeholder="e.g. Consumer"
-                                style="width: 140px;">
-                        </div>
-                        <button class="btn btn-primary" onclick="addToWatchlist()">Add</button>
+                    <!-- Hero -->
+                    <div class="hub-hero">
+                        <h1>Welcome to Jarvis Hub 2.0</h1>
+                        <p>Your AI-powered Vietnamese market intelligence dashboard</p>
                     </div>
-                </div>
-            </div>
 
-            <!-- Watchlist Table -->
-            <div id="watchlist-container">
-                <div class="empty-state">Loading watchlist...</div>
-            </div>
-        </div>
-
-        <!-- ==================== TAB 6: MARKET INTELLIGENCE ==================== -->
-        <div id="tab-mi" class="tab-content">
-            <div class="filter-bar" id="mi-filters">
-                <button class="filter-btn active" data-action="latest" onclick="setMiAction('latest')">Latest
-                    Brief</button>
-                <button class="filter-btn" data-action="history" onclick="setMiAction('history')">History</button>
-                <button class="filter-btn" data-action="sentiment" onclick="setMiAction('sentiment')">Sentiment</button>
-                <span style="margin-left: auto;">
-                    <button class="btn btn-primary" id="mi-run-btn" onclick="runMarketIntelligencePipeline()">▶ Run
-                        Pipeline Now</button>
-                </span>
-            </div>
-
-            <div id="mi-loading" class="loading" style="display:none">Loading Market Intelligence data</div>
-            <div id="mi-status" class="mi-status-bar" style="display:none"></div>
-
-            <!-- Latest Brief -->
-            <div id="mi-latest-container">
-                <div class="empty-state">Loading latest intelligence...</div>
-            </div>
-
-            <!-- History -->
-            <div id="mi-history-container" style="display:none;">
-                <div class="empty-state">Loading history...</div>
-            </div>
-
-            <!-- Sentiment Distribution -->
-             <div id="mi-sentiment-container" style="display:none;">
-                 <div class="empty-state">Loading sentiment data...</div>
-             </div>
-            </div>
-
-            <!-- ==================== TAB 7: PORTFOLIO ==================== -->
-            <div id="tab-portfolio" class="tab-content">
-                <!-- Summary Cards -->
-                <div class="grid-4" id="portfolio-summary">
-                    <div class="card stat-card">
-                        <div class="stat-label">Total Invested</div>
-                        <div class="stat-value" id="pnl-invested">—</div>
-                    </div>
-                    <div class="card stat-card">
-                        <div class="stat-label">Current Value</div>
-                        <div class="stat-value" id="pnl-current">—</div>
-                    </div>
-                    <div class="card stat-card">
-                        <div class="stat-label">Total P&L</div>
-                        <div class="stat-value" id="pnl-total">—</div>
-                    </div>
-                    <div class="card stat-card">
-                        <div class="stat-label">P&L %</div>
-                        <div class="stat-value" id="pnl-pct">—</div>
-                    </div>
-                </div>
-
-                <!-- Add Transaction Form -->
-                <div class="card" style="margin-bottom:20px;">
-                    <div class="card-head">
-                        <span class="card-title">➕ Add Transaction</span>
-                        <button class="btn btn-secondary" onclick="toggleAddTxnForm()">Toggle</button>
-                    </div>
-                    <div class="card-body" id="txn-form" style="display:none;">
-                        <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
-                            <div><label class="field-label">Ticker</label><input type="text" id="pt-symbol" placeholder="VNM" style="width:80px;" class="filter-input"></div>
-                            <div><label class="field-label">Name</label><input type="text" id="pt-name" placeholder="Company" style="width:140px;" class="filter-input"></div>
-                            <div><label class="field-label">Action</label>
-                                <select id="pt-action"><option value="buy">Buy</option><option value="sell">Sell</option></select>
+                    <!-- Overview Cards -->
+                    <div class="hub-overview">
+                        <a href="/hub2/market" class="hub-card">
+                            <div class="hub-card-icon">📊</div>
+                            <h3>Market Overview</h3>
+                            <p>Indices, crypto prices, sector heatmap, and market movers</p>
+                            <div class="hub-card-stats">
+                                <div class="hub-stat">
+                                    <span class="hub-stat-value" id="stat-indices">—</span>
+                                    <span class="hub-stat-label">Indices</span>
+                                </div>
+                                <div class="hub-stat">
+                                    <span class="hub-stat-value" id="stat-crypto">—</span>
+                                    <span class="hub-stat-label">Crypto</span>
+                                </div>
                             </div>
-                            <div><label class="field-label">Qty</label><input type="number" id="pt-qty" placeholder="100" min="1" style="width:80px;" class="filter-input"></div>
-                            <div><label class="field-label">Price (VND)</label><input type="number" id="pt-price" placeholder="59000" min="0" style="width:110px;" class="filter-input"></div>
-                            <div><label class="field-label">Date</label><input type="date" id="pt-date" style="width:140px;" class="filter-input"></div>
-                            <button class="btn btn-primary" onclick="addTransaction()">Add</button>
+                        </a>
+
+                        <a href="/hub2/news" class="hub-card">
+                            <div class="hub-card-icon">📰</div>
+                            <h3>News Aggregator</h3>
+                            <p>AI-curated trending news from multiple Vietnamese sources</p>
+                            <div class="hub-card-stats">
+                                <div class="hub-stat">
+                                    <span class="hub-stat-value" id="stat-news">—</span>
+                                    <span class="hub-stat-label">Articles</span>
+                                </div>
+                                <div class="hub-stat">
+                                    <span class="hub-stat-value" id="stat-trending">—</span>
+                                    <span class="hub-stat-label">Trending</span>
+                                </div>
+                            </div>
+                        </a>
+
+                        <a href="/hub2/company" class="hub-card">
+                            <div class="hub-card-icon">🏢</div>
+                            <h3>Company News</h3>
+                            <p>Search and filter company-specific news by ticker</p>
+                            <div class="hub-card-stats">
+                                <div class="hub-stat">
+                                    <span class="hub-stat-value" id="stat-companies">—</span>
+                                    <span class="hub-stat-label">Companies</span>
+                                </div>
+                                <div class="hub-stat">
+                                    <span class="hub-stat-value" id="stat-company-news">—</span>
+                                    <span class="hub-stat-label">News</span>
+                                </div>
+                            </div>
+                        </a>
+
+                        <a href="/hub2/research" class="hub-card">
+                            <div class="hub-card-icon">📑</div>
+                            <h3>Research Reports</h3>
+                            <p>Broker research, target prices, and buy/sell recommendations</p>
+                            <div class="hub-card-stats">
+                                <div class="hub-stat">
+                                    <span class="hub-stat-value" id="stat-reports">—</span>
+                                    <span class="hub-stat-label">Reports</span>
+                                </div>
+                                <div class="hub-stat">
+                                    <span class="hub-stat-value" id="stat-brokers">—</span>
+                                    <span class="hub-stat-label">Brokers</span>
+                                </div>
+                            </div>
+                        </a>
+
+                        <a href="/hub2/screener" class="hub-card">
+                            <div class="hub-card-icon">🔍</div>
+                            <h3>Watchlist & Screener</h3>
+                            <p>Manage watchlists, set alerts, and scan for opportunities</p>
+                            <div class="hub-card-stats">
+                                <div class="hub-stat">
+                                    <span class="hub-stat-value" id="stat-watchlist">—</span>
+                                    <span class="hub-stat-label">Watchlist</span>
+                                </div>
+                                <div class="hub-stat">
+                                    <span class="hub-stat-value" id="stat-alerts">—</span>
+                                    <span class="hub-stat-label">Alerts</span>
+                                </div>
+                            </div>
+                        </a>
+
+                        <a href="/hub2/market-intel" class="hub-card">
+                            <div class="hub-card-icon">🧠</div>
+                            <h3>Market Intelligence</h3>
+                            <p>AI sentiment analysis, market regime, and sector rotation</p>
+                            <div class="hub-card-stats">
+                                <div class="hub-stat">
+                                    <span class="hub-stat-value" id="stat-sentiment">—</span>
+                                    <span class="hub-stat-label">Sentiment</span>
+                                </div>
+                                <div class="hub-stat">
+                                    <span class="hub-stat-value" id="stat-regime">—</span>
+                                    <span class="hub-stat-label">Regime</span>
+                                </div>
+                            </div>
+                        </a>
+
+                        <a href="/hub2/portfolio" class="hub-card">
+                            <div class="hub-card-icon">💼</div>
+                            <h3>Portfolio</h3>
+                            <p>Track holdings, P&L, and transaction history</p>
+                            <div class="hub-card-stats">
+                                <div class="hub-stat">
+                                    <span class="hub-stat-value" id="stat-portfolio">—</span>
+                                    <span class="hub-stat-label">Holdings</span>
+                                </div>
+                                <div class="hub-stat">
+                                    <span class="hub-stat-value" id="stat-transactions">—</span>
+                                    <span class="hub-stat-label">Transactions</span>
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+
+                    <!-- Quick Actions -->
+                    <div class="hub-quick-actions">
+                        <h2>Quick Actions</h2>
+                        <div class="hub-actions-grid">
+                            <a href="/hub2/market" class="hub-action-btn">
+                                <span class="action-icon">📈</span>
+                                <span class="action-text">View Market</span>
+                            </a>
+                            <a href="/hub2/news" class="hub-action-btn">
+                                <span class="action-icon">🔥</span>
+                                <span class="action-text">Trending News</span>
+                            </a>
+                            <a href="/hub2/screener" class="hub-action-btn">
+                                <span class="action-icon">⚡</span>
+                                <span class="action-text">Scan Opportunities</span>
+                            </a>
+                            <a href="/hub2/market-intel" class="hub-action-btn">
+                                <span class="action-icon">🤖</span>
+                                <span class="action-text">AI Analysis</span>
+                            </a>
                         </div>
-                        <div id="txn-msg" style="margin-top:8px;font-size:13px;"></div>
+                    </div>
+
+                    <!-- Live Status -->
+                    <div class="hub-live-status">
+                        <h2>System Status</h2>
+                        <div class="hub-status-grid">
+                            <div class="hub-status-item">
+                                <div class="hub-status-indicator online" id="status-backend"></div>
+                                <div class="hub-status-label">Backend</div>
+                                <div class="hub-status-value" id="status-backend-text">Checking...</div>
+                            </div>
+                            <div class="hub-status-item">
+                                <div class="hub-status-indicator online" id="status-llm"></div>
+                                <div class="hub-status-label">LLM</div>
+                                <div class="hub-status-value" id="status-llm-text">Checking...</div>
+                            </div>
+                            <div class="hub-status-item">
+                                <div class="hub-status-indicator online" id="status-cache"></div>
+                                <div class="hub-status-label">Cache</div>
+                                <div class="hub-status-value" id="status-cache-text">Checking...</div>
+                            </div>
+                            <div class="hub-status-item">
+                                <div class="hub-status-indicator online" id="status-db"></div>
+                                <div class="hub-status-label">Database</div>
+                                <div class="hub-status-value" id="status-db-text">Checking...</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-
-                <!-- Holdings Table -->
-                <h3 class="section-title">Current Holdings</h3>
-                <div id="holdings-loading" class="loading" style="display:none">Loading holdings...</div>
-                <div id="holdings-container"></div>
-
-                <!-- Transaction History -->
-                <h3 class="section-title" style="margin-top:30px;">Transaction History</h3>
-                <div class="filter-bar">
-                    <input type="text" id="txn-filter-symbol" class="filter-input" placeholder="Filter by ticker..." onkeyup="loadTransactions()">
-                    <select id="txn-filter-action" onchange="loadTransactions()"><option value="">All</option><option value="buy">Buys</option><option value="sell">Sells</option></select>
-                </div>
-                <div id="transactions-container"></div>
             </div>
 
-    </div><!-- /main-content -->
+            <!-- Sub-pages (loaded via route) -->
+            <div id="sub-page-market" class="sub-page"></div>
+            <div id="sub-page-news" class="sub-page"></div>
+            <div id="sub-page-company" class="sub-page"></div>
+            <div id="sub-page-research" class="sub-page"></div>
+            <div id="sub-page-screener" class="sub-page"></div>
+            <div id="sub-page-market-intel" class="sub-page"></div>
+            <div id="sub-page-portfolio" class="sub-page"></div>
+        </div>
+    </div>
 
     <script src="/static/js/app.js"></script>
+    <script src="/static/js/async_tasks.js"></script>
+    <script>
+        // Hub Landing Page Logic
+        document.addEventListener('DOMContentLoaded', function () {
+            // Load overview stats
+            loadHubStats();
+            checkSystemStatus();
+        });
+
+        async function loadHubStats() {
+            try {
+                // Load market stats
+                const marketRes = await fetch('/api/indices');
+                const marketData = await marketRes.json();
+                if (marketData.indices) {
+                    document.getElementById('stat-indices').textContent = marketData.indices.length;
+                }
+                if (marketData.crypto) {
+                    const cryptoNames = marketData.crypto.map(c => c.symbol).join(', ').substring(0, 20);
+                    document.getElementById('stat-crypto').textContent = cryptoNames || '—';
+                }
+
+                // Load news stats
+                const newsRes = await fetch('/api/articles');
+                const newsData = await newsRes.json();
+                if (newsData.articles) {
+                    document.getElementById('stat-news').textContent = newsData.articles.length;
+                    document.getElementById('stat-trending').textContent = newsData.articles.filter(a => a.is_trending).length;
+                }
+
+                // Load company stats
+                const companyRes = await fetch('/api/company-news?ticker=VIC');
+                const companyData = await companyRes.json();
+                if (companyData.companies) {
+                    document.getElementById('stat-companies').textContent = companyData.companies.length;
+                }
+                if (companyData.news) {
+                    document.getElementById('stat-company-news').textContent = companyData.news.length;
+                }
+
+                // Load research stats
+                const researchRes = await fetch('/api/research');
+                const researchData = await researchRes.json();
+                if (researchData.reports) {
+                    document.getElementById('stat-reports').textContent = researchData.reports.length;
+                    const uniqueBrokers = new Set(researchData.reports.map(r => r.broker));
+                    document.getElementById('stat-brokers').textContent = uniqueBrokers.size;
+                }
+
+                // Load screener stats
+                const screenerRes = await fetch('/api/watchlist');
+                const screenerData = await screenerRes.json();
+                if (screenerData.watchlist) {
+                    document.getElementById('stat-watchlist').textContent = screenerData.watchlist.length;
+                }
+
+                // Load market intel stats
+                const intelRes = await fetch('/api/market-intel');
+                const intelData = await intelRes.json();
+                if (intelData.sentiment) {
+                    document.getElementById('stat-sentiment').textContent = intelData.sentiment;
+                }
+
+            } catch (e) {
+                console.error('Failed to load hub stats:', e);
+            }
+        }
+
+        async function checkSystemStatus() {
+            try {
+                const health = await fetch('/api/health');
+                const data = await health.json();
+
+                if (data.status === 'ok') {
+                    document.getElementById('status-backend-text').textContent = 'Online';
+                    document.getElementById('status-llm-text').textContent = data.llm_online ? 'Online' : 'Offline';
+                    document.getElementById('status-cache-text').textContent = data.cache_age < 300 ? 'Fresh' : 'Stale';
+                    document.getElementById('status-db-text').textContent = 'Connected';
+
+                    // Update indicators
+                    document.getElementById('status-llm').className = 'hub-status-indicator ' + (data.llm_online ? 'online' : 'offline');
+                } else {
+                    document.getElementById('status-backend-text').textContent = 'Offline';
+                    document.getElementById('status-backend').className = 'hub-status-indicator offline';
+                }
+            } catch (e) {
+                document.getElementById('status-backend-text').textContent = 'Error';
+                document.getElementById('status-backend').className = 'hub-status-indicator offline';
+            }
+        }
+    </script>
 </body>
 
 </html>

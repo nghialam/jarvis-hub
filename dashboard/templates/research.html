@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Research Reports — Jarvis Hub 2.0</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/subpages.css">
+</head>
+
+<body>
+    <div class="header">
+        <h1>⚡ Jarvis Hub 2.0</h1>
+        <div class="header-meta">
+            <button class="theme-toggle-btn" id="theme-toggle" onclick="toggleTheme()"
+                title="Toggle dark/light mode">🌙</button>
+            <div class="freshness">
+                <span class="freshness-dot" id="freshness-dot"></span>
+                <span id="freshness-text">Loading...</span>
+            </div>
+        </div>
+    </div>
+
+    {% include 'partials/breadcrumb.html' %}
+
+    <div class="page-header">
+        <h2>📈 Research Reports</h2>
+        <button class="btn btn-secondary" id="crawl-btn" onclick="crawlResearch()">🕷️ Crawl Brokers</button>
+    </div>
+
+    <div class="subpage-content">
+        <!-- Broker Filters -->
+        <div class="filter-bar" id="research-filters">
+            <button class="filter-btn active" data-broker="all" onclick="setResearchBroker('all')">All Brokers</button>
+            <button class="filter-btn" data-broker="SSI" onclick="setResearchBroker('SSI')">SSI</button>
+            <button class="filter-btn" data-broker="VCI" onclick="setResearchBroker('VCI')">VCI</button>
+            <button class="filter-btn" data-broker="HCM" onclick="setResearchBroker('HCM')">HCM</button>
+            <button class="filter-btn" data-broker="TCBS" onclick="setResearchBroker('TCBS')">TCBS</button>
+            <button class="filter-btn" data-broker="VCBS" onclick="setResearchBroker('VCBS')">VCBS</button>
+        </div>
+
+        <div id="research-loading" class="loading" style="display:none">Loading reports</div>
+
+        <!-- Broker Stats -->
+        <div id="research-stats"></div>
+
+        <!-- Reports Grid -->
+        <div id="research-list">
+            <div class="empty-state">Loading research reports...</div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/subpages.js"></script>
+    <script src="/static/js/async_tasks.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            loadResearch();
+            checkHealth();
+        });
+    </script>
+</body>
+
+</html>

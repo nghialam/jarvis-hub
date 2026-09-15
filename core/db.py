@@ -42,6 +42,15 @@ class Database:
         # Bind orphan methods (indent broken in this file) so they act as instance methods
         _bind_orphans(self)
 
+        # JH3.0: register shared context so blueprints auto-discover this DB instance
+        try:
+            from core.context import get_context
+            ctx = get_context()
+            if ctx.db is None:
+                ctx.db = self
+        except Exception:
+            pass
+
     def _attempt_recovery(self):
         """Check DB integrity and attempt auto-recovery if corrupted."""
         try:
@@ -50,22 +59,23 @@ class Database:
             result = c.fetchone()[0]
             
             if result != "ok":
-                print("[DB] WARNING: Database integrity check failed (%s)" % result)
+                import sys
+                print("[DB] WARNING: Database integrity check failed (%s)" % result, file=sys.stderr)
                 # Attempt basic recovery
                 backup_path = str(self.db_path) + ".bak." + datetime.now().strftime("%Y%m%d%H%M%S")
                 try:
                     import shutil
                     if os.path.exists(str(self.db_path)):
                         shutil.copy2(str(self.db_path), backup_path)
-                        print("[DB] Backup created at %s" % backup_path)
+                        print("[DB] Backup created at %s" % backup_path, file=sys.stderr)
                 except Exception:
                     pass
-                
+                    
                 # Try VACUUM first (often fixes corruption)
                 try:
                     c.execute("VACUUM")
                     c.execute("REINDEX")
-                    print("[DB] Auto-recovery succeeded with VACUUM REINDEX")
+                    print("[DB] Auto-recovery succeeded with VACUUM REINDEX", file=sys.stderr)
                 except sqlite3.Error as e2:
                     print("[DB] WARN: Auto-recovery failed, continuing but DB may be unstable", file=sys.stderr)
         except Exception as e:
@@ -167,7 +177,90 @@ class Database:
             );
 
             CREATE INDEX IF NOT EXISTS idx_mi_run_date ON market_intelligence(run_date DESC);
-            CREATE INDEX IF NOT EXISTS idx_mi_created_at ON market_intelligence(created_at DESC);           """)
+            CREATE INDEX IF NOT EXISTS idx_mi_created_at ON market_intelligence(created_at DESC);
+
+            /* === JH3.0 Tables (Phase 1.6-1.7) === */
+
+            -- Async LLM task tracking
+            CREATE TABLE IF NOT EXISTS llm_tasks (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_type    TEXT NOT NULL,           -- analyze, market_eval, news_score, etc.
+                payload      TEXT NOT NULL,           -- JSON: input parameters
+                status       TEXT NOT NULL DEFAULT 'pending',  -- pending|processing|completed|failed
+                result       TEXT,                    -- JSON: output result
+                error        TEXT,
+                created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                completed_at TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_llm_tasks_status ON llm_tasks(status);
+            CREATE INDEX IF NOT EXISTS idx_llm_tasks_type ON llm_tasks(task_type);
+
+            -- LLM result cache (for pre-compute strategy)
+            CREATE TABLE IF NOT EXISTS llm_cache (
+                key          TEXT PRIMARY KEY,        -- unique cache key
+                result       TEXT NOT NULL,           -- JSON: cached result
+                ttl_seconds  INTEGER DEFAULT 21600,  -- 6 hours default
+                created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expires_at   TIMESTAMP
+            );
+
+            -- Circuit breaker state per LLM endpoint
+            CREATE TABLE IF NOT EXISTS circuit_breaker (
+                endpoint     TEXT PRIMARY KEY,        -- e.g., /api/analyze, /api/market-eval/generate
+                state        TEXT NOT NULL DEFAULT 'closed',  -- closed|open|half-open
+                failure_count   INTEGER DEFAULT 0,
+                last_failure TIMESTAMP,
+                opened_at    TIMESTAMP,
+                half_open_allowed_at TIMESTAMP
+            );
+
+            -- v2.0 Compatibility Tables (Phase 1.7)
+            CREATE TABLE IF NOT EXISTS sector_performance (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                sector       TEXT NOT NULL,
+                change_pct   REAL,
+                market_cap   REAL,
+                top_stock    TEXT,
+                trend        TEXT,                   -- UP|DOWN|FLAT
+                captured_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_sector_performance ON sector_performance(sector);
+
+            CREATE TABLE IF NOT EXISTS entity_mentions (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                entity_name  TEXT NOT NULL,
+                entity_type  TEXT DEFAULT 'company',  -- company|person|sector|policy
+                article_id   INTEGER,
+                mention_count INTEGER DEFAULT 1,
+                sentiment    TEXT DEFAULT 'NEUTRAL',
+                first_seen   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_seen    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_entity_mentions ON entity_mentions(entity_name);
+
+            CREATE TABLE IF NOT EXISTS report_summaries (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                report_type  TEXT NOT NULL,           -- broker|earnings|market|technical
+                title        TEXT NOT NULL,
+                summary      TEXT,
+                raw_content  TEXT,
+                author       TEXT,
+                source_url   TEXT,
+                created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS broker_overview (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                broker       TEXT NOT NULL,
+                target_price REAL,
+                rating       TEXT,                   -- BUY|HOLD|SELL|OVERWEIGHT|UNDERWEIGHT
+                stock_covered TEXT,
+                published_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_broker_overview ON broker_overview(broker);
+        """)
         self._conn.commit()
         print("[DB] Initialized %s" % self.db_path)
 
@@ -194,6 +287,15 @@ class Database:
                 return c.lastrowid
             except sqlite3.Error:
                 return 0
+
+    def get_all_knowledge(self):
+        """Get all knowledge base entries."""
+        try:
+            c = self._c()
+            rows = c.execute("SELECT id, term, content, tags, created_at, updated_at FROM knowledge ORDER BY term").fetchall()
+            return [dict(r) for r in rows]
+        except sqlite3.Error:
+            return []
 
     def search_knowledge(self, query, limit=10):
         """Search knowledge base with relevance scoring based on term/content matches."""
@@ -356,7 +458,7 @@ class Database:
 
     def get_watchlist(self):
         return [dict(r) for r in self._c().execute(
-              "SELECT * FROM watchlist ORDER BY added_at DESC").fetchall()]
+              "SELECT * FROM watchlist ORDER BY updated_at DESC").fetchall()]
 
     def remove_watchlist(self, symbol):
         with self._db_lock:

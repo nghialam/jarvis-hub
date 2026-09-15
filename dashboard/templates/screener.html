@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Watchlist & Screener — Jarvis Hub 2.0</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/subpages.css">
+</head>
+
+<body>
+    <div class="header">
+        <h1>⚡ Jarvis Hub 2.0</h1>
+        <div class="header-meta">
+            <button class="theme-toggle-btn" id="theme-toggle" onclick="toggleTheme()"
+                title="Toggle dark/light mode">🌙</button>
+            <div class="freshness">
+                <span class="freshness-dot" id="freshness-dot"></span>
+                <span id="freshness-text">Loading...</span>
+            </div>
+        </div>
+    </div>
+
+    {% include 'partials/breadcrumb.html' %}
+
+    <div class="page-header">
+        <h2>⚙️ Watchlist & Screener</h2>
+    </div>
+
+    <div class="subpage-content">
+        <!-- Add to Watchlist -->
+        <div class="card" style="margin-bottom: 20px;">
+            <div class="card-head">
+                <span class="card-title">➕ Add to Watchlist</span>
+            </div>
+            <div class="card-body">
+                <div style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;">
+                    <div>
+                        <label
+                            style="display: block; font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">Ticker</label>
+                        <input type="text" class="filter-input" id="wl-symbol" placeholder="e.g. VNM"
+                            style="width: 100px;">
+                    </div>
+                    <div>
+                        <label
+                            style="display: block; font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">Name
+                            (optional)</label>
+                        <input type="text" class="filter-input" id="wl-name" placeholder="Company name"
+                            style="width: 180px;">
+                    </div>
+                    <div>
+                        <label
+                            style="display: block; font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">Sector
+                            (optional)</label>
+                        <input type="text" class="filter-input" id="wl-sector" placeholder="e.g. Consumer"
+                            style="width: 140px;">
+                    </div>
+                    <button class="btn btn-primary" onclick="addToWatchlist()">Add</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Watchlist Table -->
+        <div id="screener-loading" class="loading" style="display:none">Loading watchlist</div>
+        <div id="watchlist-container">
+            <div class="empty-state">Loading watchlist...</div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/subpages.js"></script>
+    <script src="/static/js/async_tasks.js"></script>
+    <script>
+        loadScreener();
+        checkHealth();
+    </script>
+
+    <!-- Symbol Search Modal -->
+    <div class="symbol-modal-overlay" id="symbol-modal-overlay">
+        <div class="symbol-modal">
+            <h3>🔍 Multiple Symbols Found</h3>
+            <p class="modal-subtitle">Select which symbol you want to add to your watchlist:</p>
+            <div id="symbol-results"></div>
+            <div class="symbol-modal-actions">
+                <button onclick="closeSymbolModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+</body>
+
+</html>

@@ -223,14 +223,10 @@ def _start_scheduler():
             max_instances=1,
         )
 
-        # Refresh market data every 5 minutes
-        _scheduler.add_job(
-            func=_refresh_data,
-            trigger="interval",
-            minutes=5,
-            id="market_data_refresh",
-            replace_existing=True,
-        )
+        # NOTE: The 5-minute market data refresh is owned by the
+        # PrecomputeScheduler (core/precompute_scheduler.py), which also
+        # queues LLM precompute tasks each cycle. It is intentionally not
+        # duplicated here to avoid double-fetching.
 
         _scheduler.start()
         print("[SCHEDULER] Started — Market Intelligence runs at 06:00, 12:00, 18:00, 00:00 SGT")
@@ -251,9 +247,62 @@ def _run_market_intelligence_pipeline():
 # --- Initialization ---------------------------------------------------------
 
 def _init():
-     """Initialize services. Data refresh runs in background thread to avoid blocking."""
+     """Initialize services. Data refresh runs in background thread to avoid blocking.
+
+     JH3.0 bootstrap order (each step is defensive — a failed component
+     degrades gracefully instead of blocking startup):
+       1. Load config + DB
+       2. Register API blueprints           (Phase 3)
+       3. Init security middleware           (Phase 4)
+       4. Warm async queue + precompute      (Phase 2.1, 2.12)
+       5. Start APScheduler (MI cron jobs)
+       6. Kick off initial data refresh in a background thread
+     """
      _load_config()
      _load_db()
+
+     # JH3.0: register shared context so blueprints reuse the same DB instance
+     try:
+         from core.context import init_context
+         init_context(db, config or {})
+     except Exception as e:
+         print("[BOOT] Context init failed: %s" % e)
+
+     # Phase 3: register API blueprints (collision-tolerant, see api/__init__.py)
+     try:
+         from api import register_blueprints
+         register_blueprints(app)
+     except Exception as e:
+         print("[BOOT] Blueprint registration failed: %s" % e)
+
+     # Phase 4: security middleware (rate limit, headers, auth)
+     try:
+         from core.security import init_security
+         init_security(app, config or {})
+     except Exception as e:
+         print("[BOOT] Security init failed: %s" % e)
+
+     # Phase 2: warm the async task queue (starts worker threads)
+     try:
+         from core.async_queue import get_async_queue
+         get_async_queue()
+     except Exception as e:
+         print("[BOOT] Async queue init failed: %s" % e)
+
+     # Phase 2.12: precompute scheduler (queues LLM tasks on data refresh)
+     try:
+         from core.precompute_scheduler import get_precompute_scheduler
+         _pre = get_precompute_scheduler()
+         _pre.data_refresh = _refresh_data  # actually refresh market data each cycle
+     except Exception as e:
+         print("[BOOT] Precompute scheduler init failed: %s" % e)
+
+     # APScheduler: Market Intelligence cron (data refresh owned by PrecomputeScheduler)
+     try:
+         _start_scheduler()
+     except Exception as e:
+         print("[BOOT] APScheduler init failed: %s" % e)
+
       # Start data refresh in background thread so Flask can start immediately
      refresh_thread = threading.Thread(target=_refresh_data, daemon=True)
      refresh_thread.start()
@@ -1456,6 +1505,7 @@ def api_news_list():
 def api_news_trending():
     """Get trending (high-importance) news."""
     try:
+        articles = []
         if db and hasattr(db, "get_trending_news"):
             articles = db.get_trending_news(limit=10)
         return jsonify({"status": "ok", "count": len(articles), "articles": articles})

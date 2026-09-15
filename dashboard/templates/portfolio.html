@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portfolio — Jarvis Hub 2.0</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/subpages.css">
+</head>
+
+<body>
+    <div class="header">
+        <h1>⚡ Jarvis Hub 2.0</h1>
+        <div class="header-meta">
+            <button class="theme-toggle-btn" id="theme-toggle" onclick="toggleTheme()"
+                title="Toggle dark/light mode">🌙</button>
+            <div class="freshness">
+                <span class="freshness-dot" id="freshness-dot"></span>
+                <span id="freshness-text">Loading...</span>
+            </div>
+        </div>
+    </div>
+
+    {% include 'partials/breadcrumb.html' %}
+
+    <div class="page-header">
+        <h2>💼 Portfolio</h2>
+    </div>
+
+    <div class="subpage-content">
+        <!-- Summary Cards -->
+        <div class="grid-4" id="portfolio-summary">
+            <div class="card stat-card">
+                <div class="stat-label">Total Invested</div>
+                <div class="stat-value" id="pnl-invested">—</div>
+            </div>
+            <div class="card stat-card">
+                <div class="stat-label">Current Value</div>
+                <div class="stat-value" id="pnl-current">—</div>
+            </div>
+            <div class="card stat-card">
+                <div class="stat-label">Total P&L</div>
+                <div class="stat-value" id="pnl-total">—</div>
+            </div>
+            <div class="card stat-card">
+                <div class="stat-label">P&L %</div>
+                <div class="stat-value" id="pnl-pct">—</div>
+            </div>
+        </div>
+
+        <!-- Add Transaction Form -->
+        <div class="card" style="margin-bottom:20px;">
+            <div class="card-head">
+                <span class="card-title">➕ Add Transaction</span>
+                <button class="btn btn-secondary" onclick="toggleAddTxnForm()">Toggle</button>
+            </div>
+            <div class="card-body" id="txn-form" style="display:none;">
+                <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+                    <div><label class="field-label">Ticker</label><input type="text" id="pt-symbol" placeholder="VNM"
+                            style="width:80px;" class="filter-input"></div>
+                    <div><label class="field-label">Name</label><input type="text" id="pt-name" placeholder="Company"
+                            style="width:140px;" class="filter-input"></div>
+                    <div><label class="field-label">Action</label>
+                        <select id="pt-action">
+                            <option value="buy">Buy</option>
+                            <option value="sell">Sell</option>
+                        </select>
+                    </div>
+                    <div><label class="field-label">Qty</label><input type="number" id="pt-qty" placeholder="100"
+                            min="1" style="width:80px;" class="filter-input"></div>
+                    <div><label class="field-label">Price (VND)</label><input type="number" id="pt-price"
+                            placeholder="59000" min="0" style="width:110px;" class="filter-input"></div>
+                    <div><label class="field-label">Date</label><input type="date" id="pt-date" style="width:140px;"
+                            class="filter-input"></div>
+                    <button class="btn btn-primary" onclick="addTransaction()">Add</button>
+                </div>
+                <div id="txn-msg" style="margin-top:8px;font-size:13px;"></div>
+            </div>
+        </div>
+
+        <!-- Holdings Table -->
+        <h3 class="section-title">Current Holdings</h3>
+        <div id="holdings-loading" class="loading" style="display:none">Loading holdings...</div>
+        <div id="holdings-container"></div>
+
+        <!-- Transaction History -->
+        <h3 class="section-title" style="margin-top:30px;">Transaction History</h3>
+        <div class="filter-bar">
+            <input type="text" id="txn-filter-symbol" class="filter-input" placeholder="Filter by ticker..."
+                onkeyup="loadTransactions()">
+            <select id="txn-filter-action" onchange="loadTransactions()">
+                <option value="">All</option>
+                <option value="buy">Buys</option>
+                <option value="sell">Sells</option>
+            </select>
+        </div>
+        <div id="transactions-container"></div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/subpages.js"></script>
+    <script src="/static/js/async_tasks.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            loadPortfolioSummary();
+            checkHealth();
+        });
+    </script>
+</body>
+
+</html>

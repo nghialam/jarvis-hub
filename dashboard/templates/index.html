@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -19,7 +20,11 @@
             --hover-bg: #2d333b;
         }
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -64,27 +69,99 @@
             white-space: nowrap;
         }
 
-        .nav-tab:hover { color: var(--text-primary); background-color: var(--hover-bg); }
-        .nav-tab.active { color: var(--accent-blue); border-bottom-color: var(--accent-blue); }
+        .nav-tab:hover {
+            color: var(--text-primary);
+            background-color: var(--hover-bg);
+        }
 
-        .container { padding: 30px; max-width: 1400px; margin: 0 auto; }
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
-        .section-title { font-size: 20px; margin-bottom: 20px; color: var(--accent-blue); padding-bottom: 10px; border-bottom: 2px solid var(--border-color); }
+        .nav-tab.active {
+            color: var(--accent-blue);
+            border-bottom-color: var(--accent-blue);
+        }
 
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 30px; }
-        .card { background: var(--bg-card); border-radius: 8px; padding: 20px; border: 1px solid var(--border-color); transition: transform 0.2s ease; }
-        .card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.3); }
+        .container {
+            padding: 30px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
 
-        .index-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 25px; }
-        .index-card { background: var(--bg-secondary); border-radius: 6px; padding: 15px; border-left: 3px solid var(--border-color); }
-        .index-card.positive { border-left-color: var(--accent-green); }
-        .index-card.negative { border-left-color: var(--accent-red); }
-        .index-name { font-size: 12px; color: var(--text-secondary); margin-bottom: 5px; }
-        .index-value { font-size: 20px; font-weight: bold; }
-        .index-change { font-size: 14px; margin-top: 5px; }
+        .tab-content {
+            display: none;
+        }
 
-        .article-card, .snapshot-card, .knowledge-result {
+        .tab-content.active {
+            display: block;
+        }
+
+        .section-title {
+            font-size: 20px;
+            margin-bottom: 20px;
+            color: var(--accent-blue);
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border-radius: 8px;
+            padding: 20px;
+            border: 1px solid var(--border-color);
+            transition: transform 0.2s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        .index-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .index-card {
+            background: var(--bg-secondary);
+            border-radius: 6px;
+            padding: 15px;
+            border-left: 3px solid var(--border-color);
+        }
+
+        .index-card.positive {
+            border-left-color: var(--accent-green);
+        }
+
+        .index-card.negative {
+            border-left-color: var(--accent-red);
+        }
+
+        .index-name {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 5px;
+        }
+
+        .index-value {
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        .index-change {
+            font-size: 14px;
+            margin-top: 5px;
+        }
+
+        .article-card,
+        .snapshot-card,
+        .knowledge-result {
             background: var(--bg-secondary);
             border-radius: 6px;
             padding: 15px;
@@ -92,62 +169,205 @@
             border-left: 3px solid var(--border-color);
             transition: background 0.2s ease;
         }
-        .article-card:hover, .snapshot-card:hover { background: var(--hover-bg); cursor: pointer; }
-        .article-card.sentiment-positive { border-left-color: var(--accent-green); }
-        .article-card.sentiment-negative { border-left-color: var(--accent-red); }
-        .article-card.sentiment-neutral { border-left-color: #f0c040; }
 
-        .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
-        .badge-positive { background: rgba(46,160,67,0.2); color: var(--accent-green); }
-        .badge-negative { background: rgba(218,54,51,0.2); color: var(--accent-red); }
-        .badge-neutral { background: rgba(240,152,64,0.2); color: #f0c040; }
-
-        .search-box { display: flex; gap: 10px; margin-bottom: 30px; }
-        .search-input {
-            flex: 1; padding: 12px 16px; border: 1px solid var(--border-color);
-            background: var(--bg-secondary); color: var(--text-primary); font-size: 14px;
-            border-radius: 6px; outline: none;
+        .article-card:hover,
+        .snapshot-card:hover {
+            background: var(--hover-bg);
+            cursor: pointer;
         }
-        .search-input:focus { border-color: var(--accent-blue); }
 
-        .btn { padding: 12px 24px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; transition: all 0.2s ease; }
-        .btn-primary { background: var(--accent-blue); color: white; }
-        .btn-primary:hover { background: #79c0ff; }
-        .btn-sm { padding: 6px 12px; font-size: 12px; }
-        .btn-danger { background: var(--accent-red); color: white; }
+        .article-card.sentiment-positive {
+            border-left-color: var(--accent-green);
+        }
 
-        .watchlist-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        .watchlist-table th, .watchlist-table td { padding: 12px 15px; text-align: left; border-bottom: 1px solid var(--border-color); }
-        .watchlist-table th { color: var(--text-secondary); font-weight: 600; font-size: 13px; }
+        .article-card.sentiment-negative {
+            border-left-color: var(--accent-red);
+        }
 
-        .health-item { display: flex; justify-content: space-between; align-items: center; padding: 15px; border-bottom: 1px solid var(--border-color); }
-        .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; }
-        .healthy { background: var(--accent-green); }
-        .warning { background: #f0c040; }
-        .error { background: var(--accent-red); }
+        .article-card.sentiment-neutral {
+            border-left-color: #f0c040;
+        }
 
-        .loading { text-align: center; padding: 40px; color: var(--text-secondary); }
-        .hidden { display: none; }
-        .text-green { color: var(--accent-green); }
-        .text-red { color: var(--accent-red); }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+
+        .badge-positive {
+            background: rgba(46, 160, 67, 0.2);
+            color: var(--accent-green);
+        }
+
+        .badge-negative {
+            background: rgba(218, 54, 51, 0.2);
+            color: var(--accent-red);
+        }
+
+        .badge-neutral {
+            background: rgba(240, 152, 64, 0.2);
+            color: #f0c040;
+        }
+
+        .search-box {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+
+        .search-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-size: 14px;
+            border-radius: 6px;
+            outline: none;
+        }
+
+        .search-input:focus {
+            border-color: var(--accent-blue);
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary {
+            background: var(--accent-blue);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #79c0ff;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        .btn-danger {
+            background: var(--accent-red);
+            color: white;
+        }
+
+        .watchlist-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .watchlist-table th,
+        .watchlist-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .watchlist-table th {
+            color: var(--text-secondary);
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        .health-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        .healthy {
+            background: var(--accent-green);
+        }
+
+        .warning {
+            background: #f0c040;
+        }
+
+        .error {
+            background: var(--accent-red);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .text-green {
+            color: var(--accent-green);
+        }
+
+        .text-red {
+            color: var(--accent-red);
+        }
 
         @media (max-width: 768px) {
-            .grid, .index-grid { grid-template-columns: 1fr; }
-            .container { padding: 15px; }
-            .header { flex-direction: column; gap: 10px; text-align: center; }
+
+            .grid,
+            .index-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .container {
+                padding: 15px;
+            }
+
+            .header {
+                flex-direction: column;
+                gap: 10px;
+                text-align: center;
+            }
         }
 
         #snapshotDetailModal {
-            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.7); z-index: 1000;
-            display: flex; align-items: center; justify-content: center;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
+
         #snapshotDetailModal .modal-content {
-            background: var(--bg-secondary); border-radius: 8px; padding: 25px;
-            max-width: 700px; max-height: 80vh; overflow-y: auto; width: 90%;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 25px;
+            max-width: 700px;
+            max-height: 80vh;
+            overflow-y: auto;
+            width: 90%;
         }
     </style>
 </head>
+
 <body>
     <header class="header">
         <h1>&#x2699;&#xFE0F; Jarvis Hub</h1>
@@ -161,7 +381,7 @@
         <button class="nav-tab" onclick="switchTab('watchlist')">Watchlist</button>
         <button class="nav-tab" onclick="switchTab('history')">History</button>
         <button class="nav-tab" onclick="switchTab('eval')">Market Eval</button>
-         <button class="nav-tab" onclick="switchTab('health')">Health</button>
+        <button class="nav-tab" onclick="switchTab('health')">Health</button>
     </nav>
 
     <main class="container">
@@ -171,7 +391,8 @@
             <div id="vnIndices" class="index-grid"></div>
             <div id="globalIndices" class="index-grid"></div>
 
-            <div id="rateBox" style="background: var(--bg-secondary); padding: 20px; border-radius: 8px; margin-bottom: 30px; text-align: center;">
+            <div id="rateBox"
+                style="background: var(--bg-secondary); padding: 20px; border-radius: 8px; margin-bottom: 30px; text-align: center;">
                 <div id="usdVndRate" style="font-size: 36px; font-weight: bold; color: var(--accent-blue);">--</div>
                 <div style="color: var(--text-secondary); margin-top: 5px;">USD/VND (Vietcombank)</div>
             </div>
@@ -184,7 +405,8 @@
         <section id="analyze" class="tab-content">
             <h2 class="section-title">&#x1F4C8; Stock/Gold/Crypto Analysis</h2>
             <div class="search-box">
-                <input type="text" class="search-input" id="symbolInput" placeholder="Enter symbol (e.g., VNM, BTC, XAUUSD)">
+                <input type="text" class="search-input" id="symbolInput"
+                    placeholder="Enter symbol (e.g., VNM, BTC, XAUUSD)">
                 <button class="btn btn-primary" onclick="analyzeSymbol()">&#x1F50D; Analyze</button>
             </div>
             <div id="analysisResult" class="loading">Enter a symbol and click Analyze to see the report...</div>
@@ -194,7 +416,8 @@
         <section id="knowledge" class="tab-content">
             <h2 class="section-title">&#x1F4D6; Knowledge Base (Investopedia)</h2>
             <div class="search-box">
-                <input type="text" class="search-input" id="knowledgeInput" placeholder="Search financial concepts (e.g., P/E, RSI)">
+                <input type="text" class="search-input" id="knowledgeInput"
+                    placeholder="Search financial concepts (e.g., P/E, RSI)">
                 <button class="btn btn-primary" onclick="searchKnowledge()">&#x1F50D; Search</button>
             </div>
             <div id="knowledgeResults">Enter a keyword and click Search to search knowledge base...</div>
@@ -209,7 +432,13 @@
             </div>
             <table class="watchlist-table">
                 <thead>
-                    <tr><th>Symbol</th><th>Name</th><th>Price</th><th>Change%</th><th>Action</th></tr>
+                    <tr>
+                        <th>Symbol</th>
+                        <th>Name</th>
+                        <th>Price</th>
+                        <th>Change%</th>
+                        <th>Action</th>
+                    </tr>
                 </thead>
                 <tbody id="watchlistBody"></tbody>
             </table>
@@ -219,32 +448,38 @@
         <section id="history" class="tab-content">
             <h2 class="section-title">&#x1F552; Daily Snapshots</h2>
             <div id="snapshotsList"></div>
-         </section>
+        </section>
 
-           <!-- MARKET EVALUATION -->
-           <section id="eval" class="tab-content">
-               <h2 class="section-title">&#x1F4CA; Market Evaluation &amp; Recommendations</h2>
-               <div style="margin-bottom: 15px;">
-                   <button class="btn btn-primary" onclick="generateEvaluation()">&#x1F504; Generate Today's Eval</button>
-                   <span id="evalStatus" style="color: var(--text-secondary); font-size: 12px; margin-left: 10px;"></span>
-               </div>
-               <div id="evalContent"><div class="loading">Loading market evaluation...</div></div>
-               <div id="evalHistory" style="margin-top: 30px;"></div>
-           </section>
+        <!-- MARKET EVALUATION -->
+        <section id="eval" class="tab-content">
+            <h2 class="section-title">&#x1F4CA; Market Evaluation &amp; Recommendations</h2>
+            <div style="margin-bottom: 15px;">
+                <button class="btn btn-primary" onclick="generateEvaluation()">&#x1F504; Generate Today's Eval</button>
+                <span id="evalStatus" style="color: var(--text-secondary); font-size: 12px; margin-left: 10px;"></span>
+            </div>
+            <div id="evalContent">
+                <div class="loading">Loading market evaluation...</div>
+            </div>
+            <div id="evalHistory" style="margin-top: 30px;"></div>
+        </section>
 
-          <!-- HEALTH -->
-         <section id="health" class="tab-content">
+        <!-- HEALTH -->
+        <section id="health" class="tab-content">
             <h2 class="section-title">&#x1F7E2; System Health</h2>
-            <div id="healthStatus"><div class="loading">Checking system health...</div></div>
+            <div id="healthStatus">
+                <div class="loading">Checking system health...</div>
+            </div>
         </section>
     </main>
 
-     <!-- Snapshot Detail Modal -->
-    <div id="snapshotDetailModal" class="hidden" style="display:none !important;" onclick="if(event.target===this) { this.classList.add('hidden'); this.style.display='none'; }">
+    <!-- Snapshot Detail Modal -->
+    <div id="snapshotDetailModal" class="hidden" style="display:none !important;"
+        onclick="if(event.target===this) { this.classList.add('hidden'); this.style.display='none'; }">
         <div class="modal-content">
             <h3 id="snapshotTitle"></h3>
             <p id="snapshotContent" style="margin-top:15px; white-space:pre-wrap; line-height:1.6;"></p>
-            <button class="btn btn-primary" style="margin-top:20px;" onclick="document.getElementById('snapshotDetailModal').classList.add('hidden'); document.getElementById('snapshotDetailModal').style.display='none'">Close</button>
+            <button class="btn btn-primary" style="margin-top:20px;"
+                onclick="document.getElementById('snapshotDetailModal').classList.add('hidden'); document.getElementById('snapshotDetailModal').style.display='none'">Close</button>
         </div>
     </div>
 
@@ -354,14 +589,14 @@
                         const content = data.snapshots[0].full_content;
                         const lines = content.split('\n').filter(l => l.trim().length > 5);
 
-                         let html = '';
+                        let html = '';
                         let articleCount = 0;
 
                         for (const line of lines) {
-                             // Match **N. title** markdown format
+                            // Match **N. title** markdown format
                             const match = line.match(/^\*\*?\d+\.\s*\*\*?\s*(.+?)\s*\*\*?$/);
                             if (match) {
-                                 // Article title - strip markdown bold markers and numbering
+                                // Article title - strip markdown bold markers and numbering
                                 const cleanTitle = match[1].trim();
                                 articleCount++;
 
@@ -427,7 +662,7 @@
                     const d = data.data;
                     let html = `<div style="margin-bottom:20px;">`;
                     html += `<h3>${d.name || d.symbol} (${d.symbol})</h3>`;
-                    html += `<p style="font-size:24px; margin:10px 0;">${d.price ? d.price.toLocaleString() + ' ' + (d.currency||'') : 'N/A'}</p>`;
+                    html += `<p style="font-size:24px; margin:10px 0;">${d.price ? d.price.toLocaleString() + ' ' + (d.currency || '') : 'N/A'}</p>`;
 
                     if (d.change_pct !== undefined) {
                         const cls = d.change_pct >= 0 ? 'text-green' : 'text-red';
@@ -527,23 +762,23 @@
         function saveGenerated(term, btn) {
             fetch('/api/knowledge/save', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ term, content: document.querySelector('#knowledgeResults pre').textContent })
             })
-            .then(r => r.json())
-            .then(data => {
-                if (data.ok) {
-                    btn.textContent = 'Saved!';
-                    btn.disabled = true;
-                }
-            });
+                .then(r => r.json())
+                .then(data => {
+                    if (data.ok) {
+                        btn.textContent = 'Saved!';
+                        btn.disabled = true;
+                    }
+                });
         }
 
-         // === Watchlist Management ===
+        // === Watchlist Management ===
         function loadWatchlist() {
             fetch('/api/watchlist')
-                 .then(r => r.json())
-                 .then(data => {
+                .then(r => r.json())
+                .then(data => {
                     const tbody = document.getElementById('watchlistBody');
 
                     const items = data.watchlist || data.items || [];
@@ -551,7 +786,7 @@
                     if (items.length === 0) {
                         tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color: var(--text-secondary);">Watchlist is empty. Add symbols above.</td></tr>';
                         return;
-                     }
+                    }
 
                     let html = '';
                     items.forEach(item => {
@@ -587,18 +822,18 @@
 
             fetch('/api/watchlist/add', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ symbol })
             })
-            .then(r => r.json())
-            .then(data => {
-                if (data.ok) {
-                    input.value = '';
-                    loadWatchlist();
-                } else {
-                    alert('Error: ' + data.error);
-                }
-            });
+                .then(r => r.json())
+                .then(data => {
+                    if (data.ok) {
+                        input.value = '';
+                        loadWatchlist();
+                    } else {
+                        alert('Error: ' + data.error);
+                    }
+                });
         }
 
         function removeFromWatchlist(symbol, id) {
@@ -606,13 +841,13 @@
 
             fetch('/api/watchlist/remove', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ symbol })
             })
-            .then(r => r.json())
-            .then(data => {
-               if (data.ok) loadWatchlist();
-            });
+                .then(r => r.json())
+                .then(data => {
+                    if (data.ok) loadWatchlist();
+                });
         }
 
         // === History/Snapshots ===
@@ -697,48 +932,50 @@
         });
 
         // Enter key handlers
-        document.getElementById('symbolInput').addEventListener('keypress', (e) => { if(e.key==='Enter') analyzeSymbol(); });
-        document.getElementById('knowledgeInput').addEventListener('keypress', (e) => { if(e.key==='Enter') searchKnowledge(); });
-        document.getElementById('newSymbolInput').addEventListener('keypress', (e) => { if(e.key==='Enter') addToWatchlist(); });
+        document.getElementById('symbolInput').addEventListener('keypress', (e) => { if (e.key === 'Enter') analyzeSymbol(); });
+        document.getElementById('knowledgeInput').addEventListener('keypress', (e) => { if (e.key === 'Enter') searchKnowledge(); });
+        document.getElementById('newSymbolInput').addEventListener('keypress', (e) => { if (e.key === 'Enter') addToWatchlist(); });
     </script>
 
     <script>
-    // === FIX A: Auto-Poll Engine (2-minute tab-independent refresh) ===
-    const AUTO_POLL_MS = 120000; // 2 minutes
-    let _dashboardLastRefresh = parseInt(localStorage.getItem('jarvis_last_refresh') || '0');
-    function markFresh() { _dashboardLastRefresh = Date.now(); localStorage.setItem('jarvis_last_refresh', String(_dashboardLastRefresh)); }
+        // === FIX A: Auto-Poll Engine (2-minute tab-independent refresh) ===
+        const AUTO_POLL_MS = 120000; // 2 minutes
+        let _dashboardLastRefresh = parseInt(localStorage.getItem('jarvis_last_refresh') || '0');
+        function markFresh() { _dashboardLastRefresh = Date.now(); localStorage.setItem('jarvis_last_refresh', String(_dashboardLastRefresh)); }
 
-    setInterval(function checkAndReloadMarket() {
-    const elapsed = Date.now() - (_dashboardLastRefresh || 0);
-    if (elapsed > 300000) { // staler than 5 min
-       markFresh(); loadDashboard(); console.log('[Jarvis] Auto-refreshed market data');
-    }
-    }, AUTO_POLL_MS);
+        setInterval(function checkAndReloadMarket() {
+            const elapsed = Date.now() - (_dashboardLastRefresh || 0);
+            if (elapsed > 300000) { // staler than 5 min
+                markFresh(); loadDashboard(); console.log('[Jarvis] Auto-refreshed market data');
+            }
+        }, AUTO_POLL_MS);
 
-    function showAutoupdateBanner(msg, dur) {
-    let b = document.getElementById('autoupdateBanner');
-    if (!b) { b=document.createElement('div'); b.id='autoupdateBanner'; document.body.appendChild(b); };
-    b.style.cssText='position:fixed;top:18px;left:50%;transform:translateX(-50%);' +
-        'background:#2ea043;color:white;padding:6px 20px;border-radius:18px;' +
-        'font-size:11px;z-index:9999;box-shadow:0 2px 12px rgba(0,0,0,0.3);';
-    b.textContent = msg; b.style.display = 'block';
-    setTimeout(function() { b.style.display = 'none' }, dur || 3500);
-    }
-    window.addEventListener('load', function() { showAutoupdateBanner('System self-updating active', 3000); });
+        function showAutoupdateBanner(msg, dur) {
+            let b = document.getElementById('autoupdateBanner');
+            if (!b) { b = document.createElement('div'); b.id = 'autoupdateBanner'; document.body.appendChild(b); };
+            b.style.cssText = 'position:fixed;top:18px;left:50%;transform:translateX(-50%);' +
+                'background:#2ea043;color:white;padding:6px 20px;border-radius:18px;' +
+                'font-size:11px;z-index:9999;box-shadow:0 2px 12px rgba(0,0,0,0.3);';
+            b.textContent = msg; b.style.display = 'block';
+            setTimeout(function () { b.style.display = 'none' }, dur || 3500);
+        }
+        window.addEventListener('load', function () { showAutoupdateBanner('System self-updating active', 3000); });
 
-    // === FIX B: Prominent Recommendation Badge Renderer ===
-    function renderRecommendation(rec_text) {
-    const c = document.getElementById('analysisResult');
-    if (!c || !rec_text) return;
-    let cls='neutral', lbl='HOLD';
-    const upper=(rec_text+'').toUpperCase();
-    if(/MUA|BUY/.test(upper)){cls='buy';lbl='BUY';} else if(/BAN|SELL/.test(upper)){cls='sell';lbl='SELL';}
-    const h='<div class="recommendation-badge">'+
-        '<span style="font-size:10px;text-transform:uppercase;">RECOMMENDATION</span><br>' +
-        '<span style="font-size:24px;font-weight:bold;color:'+(cls==='buy'?'#f0c040':cls==='sell'?'#da3633':'#2ea043')+'">'+lbl+'</span>'+
-        '</div>';
-    c.innerHTML += h;
-    }
+        // === FIX B: Prominent Recommendation Badge Renderer ===
+        function renderRecommendation(rec_text) {
+            const c = document.getElementById('analysisResult');
+            if (!c || !rec_text) return;
+            let cls = 'neutral', lbl = 'HOLD';
+            const upper = (rec_text + '').toUpperCase();
+            if (/MUA|BUY/.test(upper)) { cls = 'buy'; lbl = 'BUY'; } else if (/BAN|SELL/.test(upper)) { cls = 'sell'; lbl = 'SELL'; }
+            const h = '<div class="recommendation-badge">' +
+                '<span style="font-size:10px;text-transform:uppercase;">RECOMMENDATION</span><br>' +
+                '<span style="font-size:24px;font-weight:bold;color:' + (cls === 'buy' ? '#f0c040' : cls === 'sell' ? '#da3633' : '#2ea043') + '">' + lbl + '</span>' +
+                '</div>';
+            c.innerHTML += h;
+        }
     </script>
-    </body>
+    <script src="/static/js/async_tasks.js"></script>
+</body>
+
 </html>

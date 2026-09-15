@@ -182,7 +182,7 @@ def get_dashboard_data(refresh=False):
     # Get portfolio watchlist
     try:
         watchlist_rows = db._conn.execute(
-            "SELECT id, symbol, name, sector, last_checked FROM portfolio_watchlist ORDER BY added_at"
+            "SELECT id, symbol, name, sector, last_checked FROM portfolio_watchlist ORDER BY updated_at"
         ).fetchall()
 
         watchlist = []

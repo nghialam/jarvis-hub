@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>News Aggregator — Jarvis Hub 2.0</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/subpages.css">
+</head>
+
+<body>
+    <div class="header">
+        <h1>⚡ Jarvis Hub 2.0</h1>
+        <div class="header-meta">
+            <button class="theme-toggle-btn" id="theme-toggle" onclick="toggleTheme()"
+                title="Toggle dark/light mode">🌙</button>
+            <div class="freshness">
+                <span class="freshness-dot" id="freshness-dot"></span>
+                <span id="freshness-text">Loading...</span>
+            </div>
+        </div>
+    </div>
+
+    {% include 'partials/breadcrumb.html' %}
+
+    <div class="page-header">
+        <h2>📰 News Aggregator</h2>
+        <button class="btn btn-secondary" id="refresh-news-btn" onclick="refreshNews()">🔄 Refresh</button>
+    </div>
+
+    <div class="subpage-content">
+        <!-- Category Filters -->
+        <div class="filter-bar" id="news-filters">
+            <button class="filter-btn active" data-category="all" onclick="setNewsCategory('all')">All</button>
+            <button class="filter-btn" data-category="vn-market" onclick="setNewsCategory('vn-market')">VN
+                Market</button>
+            <button class="filter-btn" data-category="vn-business"
+                onclick="setNewsCategory('vn-business')">Business</button>
+            <button class="filter-btn" data-category="global-business"
+                onclick="setNewsCategory('global-business')">Global</button>
+            <button class="filter-btn" data-category="vn-tech" onclick="setNewsCategory('vn-tech')">Tech</button>
+        </div>
+
+        <div id="news-loading" class="loading" style="display:none">Loading news</div>
+
+        <!-- Featured / Trending -->
+        <div id="news-featured"></div>
+
+        <!-- News List -->
+        <div id="news-list">
+            <div class="empty-state">Loading news articles...</div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/subpages.js"></script>
+    <script src="/static/js/async_tasks.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            loadNews();
+            checkHealth();
+        });
+    </script>
+</body>
+
+</html>

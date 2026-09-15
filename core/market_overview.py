@@ -436,15 +436,16 @@ def fetch_all_overview():
                   ("oil", fetch_oil),
                   ("dxy", fetch_dxy)]
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-            futures = {name: executor.submit(_fetch_all_task, (name, fn)) for name, fn in tasks}
-            for future in concurrent.futures.as_completed(futures):
-                name, data, err = future.result()
+        # Sequential fetch to avoid concurrent.futures issues
+        for name, fn in tasks:
+            try:
+                data = fn()
                 if data:
                     results[name] = data
                     print(f"[OK] {name}: fetched")
-                if err:
-                    errors.append(err)
+            except Exception as e:
+                errors.append(f"{name}: {e}")
+                print(f"[WARN] {name} failed: {e}")
 
     except Exception as e:
         print(f"[ERROR] Overview fetch error: {e}", file=sys.stderr)

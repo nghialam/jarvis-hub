@@ -25,6 +25,7 @@ const API = {
     watchlist: '/api/watchlist',
     watchlistAdd: '/api/watchlist/add',
     watchlistRm: '/api/watchlist/remove',
+    symbolSearch: '/api/symbols/search',
     heatmap: '/api/v1/market/heatmap',
     health: '/health',
 };
@@ -148,6 +149,8 @@ async function apiPost(url, data) {
             return null;
         }
 }
+
+window.apiPost = apiPost;
 
 /* ---- Destory old charts before redraw ---- */
 
@@ -886,7 +889,7 @@ async function loadScreener() {
            // Load watchlist
         const wlRes = await apiGet(API.watchlist);
         if (wlRes) {
-            renderWatchlist(wlRes.watchlist || []);
+            renderWatchlist(wlRes.symbols || []);
         }
 
         if (container) container.style.display = 'none';
@@ -935,9 +938,82 @@ async function addToWatchlist() {
             return;
         }
 
-        const res = await apiPost(API.watchlistAdd, { symbol, name, sector });
-        if (res && res.status === 'ok') {
-            symbolEl.value = '';
+        // Step 1: Verify symbol exists and check for multiple matches
+        const searchRes = await apiGet(API.symbolSearch, { q: symbol });
+        if (!searchRes || !searchRes.matches || searchRes.matches.length === 0) {
+            alert(`Symbol "${symbol}" not found. Please check the ticker.`);
+            return;
+        }
+
+        // Step 2: Single match → add directly
+        if (searchRes.matches.length === 1) {
+            const match = searchRes.matches[0];
+            const addName = name || match.name || '';
+            const addSector = sector || match.sector || '';
+            const res = await apiPost(API.watchlistAdd, { symbol: match.ticker, name: addName, sector: addSector });
+            if (res && res.success) {
+                symbolEl.value = '';
+                nameEl.value = '';
+                sectorEl.value = '';
+                await loadScreener();
+            } else {
+                alert('Failed to add to watchlist.');
+            }
+            return;
+        }
+
+        // Step 3: Multiple matches → show modal for user selection
+        showSymbolModal(symbol, searchRes.matches, name, sector);
+}
+
+async function searchSymbols(query) {
+        const res = await apiGet(API.symbolSearch, { q: query });
+        return res || { matches: [] };
+}
+
+function showSymbolModal(query, matches, defaultName, defaultSector) {
+        const overlay = document.getElementById('symbol-modal-overlay');
+        const resultsDiv = document.getElementById('symbol-results');
+
+        // Build result items
+        resultsDiv.innerHTML = matches.map((m, i) => `
+            <div class="symbol-result-item" onclick="confirmSymbolSelection('${m.symbol}', ${i})">
+                <div class="symbol-result-info">
+                    <div class="symbol-result-ticker">${m.symbol}</div>
+                    <div class="symbol-result-name">${m.name || 'N/A'}</div>
+                </div>
+                <span class="symbol-result-type">${m.type || 'UNKNOWN'}</span>
+            </div>
+        `).join('');
+
+        overlay.classList.add('active');
+        window._pendingAdd = { matches, defaultName, defaultSector };
+}
+
+function closeSymbolModal() {
+        document.getElementById('symbol-modal-overlay').classList.remove('active');
+        window._pendingAdd = null;
+}
+
+async function confirmSymbolSelection(ticker, index) {
+        const pending = window._pendingAdd;
+        if (!pending || !pending.matches[index]) {
+            closeSymbolModal();
+            return;
+        }
+
+        const match = pending.matches[index];
+        const nameEl = document.getElementById('wl-name');
+        const sectorEl = document.getElementById('wl-sector');
+        const name = pending.defaultName || nameEl.value || match.name || '';
+        const sector = pending.defaultSector || sectorEl.value || match.sector || '';
+
+        // Close modal and add
+        closeSymbolModal();
+
+        const res = await apiPost(API.watchlistAdd, { symbol: ticker, name, sector });
+        if (res && res.success) {
+            document.getElementById('wl-symbol').value = '';
             nameEl.value = '';
             sectorEl.value = '';
             await loadScreener();
@@ -1004,8 +1080,8 @@ function updateFreshness() {
 /* ---- Market Intelligence tab ---- */
 
 async function loadMarketIntelligence() {
-        const container = document.getElementById('mi-loading');
-        if (container) container.style.display = 'block';
+        const container = document.getElementById('watchlist-container');
+        if (container) container.style.display = 'none';
 
         // Load latest brief by default
         await loadMiLatest();

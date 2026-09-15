@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Market Overview — Jarvis Hub 2.0</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/subpages.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+
+<body>
+    <!-- Header -->
+    <div class="header">
+        <h1>⚡ Jarvis Hub 2.0</h1>
+        <div class="header-meta">
+            <button class="theme-toggle-btn" id="theme-toggle" onclick="toggleTheme()"
+                title="Toggle dark/light mode">🌙</button>
+            <div class="freshness">
+                <span class="freshness-dot" id="freshness-dot"></span>
+                <span id="freshness-text">Loading...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Breadcrumb -->
+    {% include 'partials/breadcrumb.html' %}
+
+    <!-- Page Title -->
+    <div class="page-header">
+        <h2>📊 Market Overview</h2>
+        <button class="btn btn-primary" id="refresh-market-btn" onclick="loadMarketOverview()">🔄 Refresh</button>
+    </div>
+
+    <!-- Main Content -->
+    <div class="subpage-content">
+        <div id="market-loading" class="loading" style="display:none">Loading market data</div>
+
+        <!-- Daily Snapshot Cards -->
+        <h3 class="section-title">DAILY SNAPSHOT</h3>
+        <div class="grid-4" id="daily-snapshot-grid">
+            <div class="empty-state">Loading...</div>
+        </div>
+
+        <!-- VN Indices -->
+        <h3 class="section-title">VIETNAMESE INDICES</h3>
+        <div class="grid-3" id="vn-indices-grid">
+            <div class="empty-state">Loading...</div>
+        </div>
+
+        <!-- Global Indices -->
+        <h3 class="section-title">GLOBAL INDICES</h3>
+        <div class="grid-4" id="global-indices-grid">
+            <div class="empty-state">Loading...</div>
+        </div>
+
+        <!-- Crypto & Gold -->
+        <h3 class="section-title">CRYPTO & COMMODITIES</h3>
+        <div class="grid-5">
+            <div id="crypto-grid"></div>
+            <div id="gold-container"></div>
+        </div>
+
+        <!-- Sector Heatmap -->
+        <h3 class="section-title">SECTOR HEATMAP</h3>
+        <div id="sector-heatmap-container">
+            <div class="empty-state">Loading sector data...</div>
+        </div>
+
+        <!-- Top Movers -->
+        <h3 class="section-title">TOP MOVERS</h3>
+        <div id="top-motions-container">
+            <div class="empty-state">Loading top movers...</div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/subpages.js"></script>
+    <script src="/static/js/async_tasks.js"></script>
+    <script>
+        // Load market data on page load
+        document.addEventListener('DOMContentLoaded', function () {
+            loadMarketOverview();
+            checkHealth();
+        });
+    </script>
+</body>
+
+</html>
