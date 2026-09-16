@@ -81,7 +81,7 @@
 | JH3.0-P3.8 | P1 | API | api/research.py (search, portfolio) | ✅ DONE (Sep 10) |
 | JH3.0-P3.9 | P1 | API | api/portfolio.py (summary, holdings, market-overview, snapshot) | ✅ DONE (Sep 10) |
 | JH3.0-P3.10 | P0 | Core | AppContext singleton (db, queue, lm, config, cache) | ✅ DONE (Sep 10) |
-| JH3.0-P3.11 | P0 | Core | Wire blueprints into app.py (reregister 84 routes) | ⏳ PENDING — BLOCKER |
+| JH3.0-P3.11 | P0 | Core | Wire blueprints into app.py (reregister 84 routes) | ✅ DONE (Sep 16) |
 | JH3.0-P3.12 | P1 | Services | research_service.py (search, save, share, ai_process) | ✅ DONE (Sep 10) |
 | JH3.0-P3.13 | P1 | Services | subscription_service.py (subscribe, unsubscribe, list, notify) | ✅ DONE (Sep 10) |
 | JH3.0-P3.14 | P2 | Core | Gateway interface (LLM, VNStock, vnai, vnmarket, Remote) | ✅ DONE (Sep 10) |
@@ -128,18 +128,20 @@
 
 ## Phase 2: Async Queue — 4 remaining
 
-| ID | Prio | Module | Title | Status |
+|| ID | Prio | Module | Title | Status |
 |---|---|---|---|---|
-| JH3.0-P2.7 | P1 | API | Add news score endpoint to /api/v1/news/score | Open |
+| JH3.0-P2.7 | P1 | API | Add news score endpoint to /api/v1/news/score | ✅ DONE (blueprint exists in api/news.py) |
 | JH3.0-P2.8 | P1 | Core | Wire precompute scheduler to queue tasks on MI refresh | Open |
 | JH3.0-P2.10 | P1 | UI | Frontend task polling UI (task status badges) | Open |
 | JH3.0-P2.11 | P2 | UI | Frontend LLM-in-progress UI | Open |
 
-## Phase 3: Architecture — 1 remaining (BLOCKER)
+## Phase 3: Architecture — BLOCKER RESOLVED
 
 | ID | Prio | Module | Title | Status |
 |---|---|---|---|---|
-| JH3.0-P3.11 | P0 | Core | Wire blueprints into app.py — reregister 84 routes from monolith | Open — BLOCKER |
+| JH3.0-P3.11 | P0 | Core | Wire blueprints into app.py | ✅ DONE (Sep 16 — dual-path: app.py /api/* + blueprints /api/v1/*) |
+| JH3.0-P3.17 | P1 | UI | Migrate frontend to /api/v1/* endpoints | Open — FRONTEND MIGRATION |
+| JH3.0-P3.18 | P1 | Core | Remove legacy app.py routes after frontend migration | Open — DEPENDS on P3.17 |
 
 ## Phase 4: Security — 2 remaining
 
