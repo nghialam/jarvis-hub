@@ -565,7 +565,7 @@
                 }
 
                 // Load company stats
-                const companyRes = await fetch('/api/company-news?ticker=VIC');
+                const companyRes = await fetch('/api/v1/companies?ticker=VIC');
                 const companyData = await companyRes.json();
                 if (companyData.companies) {
                     document.getElementById('stat-companies').textContent = companyData.companies.length;
@@ -575,7 +575,7 @@
                 }
 
                 // Load research stats
-                const researchRes = await fetch('/api/research');
+                const researchRes = await fetch('/api/v1/research/reports');
                 const researchData = await researchRes.json();
                 if (researchData.reports) {
                     document.getElementById('stat-reports').textContent = researchData.reports.length;

@@ -25,7 +25,7 @@ const API = {
     watchlist: '/api/watchlist',
     watchlistAdd: '/api/watchlist/add',
     watchlistRm: '/api/watchlist/remove',
-    symbolSearch: '/api/symbols/search',
+    symbolSearch: '/api/v1/stocks/symbols/search',
     heatmap: '/api/v1/market/heatmap',
     health: '/health',
 };
