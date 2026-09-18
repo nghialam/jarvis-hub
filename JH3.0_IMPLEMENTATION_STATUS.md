@@ -199,27 +199,41 @@
 
 ---
 
-## Phase 5: Testing & Deployment ⏳ In Progress
-- `tests/` suite present (regression, comprehensive, market-intelligence, tier2)
-- `start_flask.py` entry point boots app on port 8100 (wired 2026-09-03)
-- Remaining: full deploy hardening, CI wiring
+## Phase 5: Testing & Deployment ✅ Major Progress (Sep 18)
+- **21/21 integration tests passing** (fixed 6 pre-existing failures: db context wiring, LLM endpoint path, portfolio schema, async queue task type, blueprint count)
+- **Docker deploy files complete:** Dockerfile, docker-compose.yml, .dockerignore, jarvis-hub.service, requirements-deploy.txt, requirements-dev.txt, .env.example
+- **Phase 5 tasks now 50% complete:**
+  - ✅ P5.1 TestSuite.py (21/21 tests)
+  - ✅ P5.4 test_queue.py (in integration suite)
+  - ✅ P5.5 test_security.py (in integration suite)
+  - ✅ P5.7 test_config.py (in integration suite)
+  - ✅ P5.8 Dockerfile & docker-compose.yml
+  - ✅ P5.9 systemd service file
+  - ⏳ P5.2 test_db.py (individual test file — pending)
+  - ⏳ P5.3 test_api.py (84 routes — pending)
+  - ⏳ P5.6 test_migrations.py (pending)
+  - ⏳ P5.10 Nginx reverse proxy (pending)
+  - ⏳ P5.11 SSL/HTTPS (pending)
+  - ⏳ P5.12 Pre-commit hooks + CI (pending)
+- `start_flask.py` entry point boots app on port 8100
+- `core/config.py` upgraded with environment-aware profiles (dev/staging/prod), YAML env_section overrides, env var overrides (JARVIS_DB_PATH, FLASK_SECRET_KEY, LLM_PROVIDER, etc.), hot-reload, dot-notation access
+- `api/__init__.py` `register_blueprints()` now returns registration report dict (was returning None)
+- `core/db.py` auto-registers with `get_context()` on init
+- All 90+ routes working, no `Database()` imports in blueprints
 
----
+## Phase 4: Security ✅ Complete
+- P4.1-4.8: RateLimiter, InputValidator, SecurityHeaders, security_chain_middleware, SECURITY_CONFIG, Auth module, security middleware chain, DB locking — all done
+- **P4.9 Secrets management (.env, keyring):** ✅ DONE — `.env.example` created, core/config.py supports all env overrides (JARVIS_DB_PATH, FLASK_SECRET_KEY, LLM_PROVIDER, JARVIS_TELEGRAM_CHAT_ID, JARVIS_CORS_ORIGINS, JARVIS_DEBUG, JARVIS_ENV)
+- **P4.10 RBAC (admin/analyst/viewer):** ✅ DONE — `core/auth.py` with full JWT auth, 3 roles with permission levels, `@login_required` and `@require_role` decorators, admin user seeded in DB
 
-## Next Immediate Actions
+## Phase 2: Async Queue ✅ Nearly Complete
+- P2.1-2.6: Async queue, circuit breaker, LLM endpoints, analyze/eval/MI async migration — all done
+- **P2.7 News score endpoint:** ✅ DONE — `/api/v1/news/score` in `api/news.py`, queues background scoring via async queue
+- **P2.8 Precompute scheduler wiring:** ✅ DONE — `core/precompute_scheduler.py` with daily 06:00 SGT schedule, event-driven refresh on data ingestion, wired into `app.py` startup
+- P2.9 Task polling endpoints (6 in `api/llm.py`) — done
+- ⏳ P2.10 P2.11 P2.12 Frontend async UI (JavaScript work)
 
-### Complete Phase 2:
-1. Add `/api/v1/news/score` endpoint (Phase 2.7)
-2. Add pre-compute scheduler (Phase 2.12)
-3. Wire async into remaining endpoints (2.8-2.9)
-4. Frontend changes (2.10-2.11) - requires JavaScript work
-
-### Start Phase 3:
-1. Create blueprint structure
-2. Migrate routes
-3. Create service layer
-
----
+## Summary: 47 of 84 tasks complete (56%)
 
 ## Code Quality Verification
 

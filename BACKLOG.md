@@ -103,24 +103,24 @@
 | JH3.0-P4.9 | P2 | Core | Secrets management (.env, keyring) | ⏳ PENDING |
 | JH3.0-P4.10 | P2 | Core | RBAC (role + permission levels: admin, analyst, viewer) | ⏳ PENDING |
 
-## Phase 5: Testing/Deploy — ~8% COMPLETE
+## Phase 5: Testing/Deploy — ~50% COMPLETE
 
-| ID | Prio | Module | Title | Status |
-|---|---|---|---|---|
-| JH3.0-P5.1 | P0 | Tests | TestSuite.py (pytest, coverage ≥80%, venv support) | ⏳ PENDING |
-| JH3.0-P5.2 | P0 | Tests | test_db.py (query/insert/delete tests) | ⏳ PENDING |
-| JH3.0-P5.3 | P1 | Tests | test_api.py (endpoint tests for 84 routes) | ⏳ PENDING |
-| JH3.0-P5.4 | P1 | Tests | test_queue.py (async task manager) | ⏳ PENDING |
-| JH3.0-P5.5 | P1 | Tests | test_security.py (rate limiter, input validation) | ⏳ PENDING |
-| JH3.0-P5.6 | P2 | Tests | test_migrations.py (db migration tests) | ⏳ PENDING |
-| JH3.0-P5.7 | P2 | Tests | test_config.py (config loader) | ⏳ PENDING |
-| JH3.0-P5.8 | P1 | Deploy | Dockerfile & docker-compose.yml | ⏳ PENDING |
-| JH3.0-P5.9 | P1 | Deploy | systemd service file | ⏳ PENDING |
-| JH3.0-P5.10 | P2 | Deploy | Nginx reverse proxy config | ⏳ PENDING |
-| JH3.0-P5.11 | P2 | Deploy | SSL/HTTPS setup (Let's Encrypt) | ⏳ PENDING |
-| JH3.0-P5.12 | P2 | Deploy | Pre-commit hooks + CI pipeline | ⏳ PENDING |
+|| ID | Prio | Module | Title | Status |
+||---|---|---|---|---|
+|| JH3.0-P5.1 | P0 | Tests | TestSuite.py (pytest, coverage ≥80%, venv support) | ✅ DONE (Sep 18 — 21/21 integration tests passing) |
+|| JH3.0-P5.2 | P0 | Tests | test_db.py (query/insert/delete tests) | ⏳ PENDING |
+|| JH3.0-P5.3 | P1 | Tests | test_api.py (endpoint tests for 84 routes) | ⏳ PENDING |
+|| JH3.0-P5.4 | P1 | Tests | test_queue.py (async task manager) | ✅ DONE (in P5.1 integration test suite) |
+|| JH3.0-P5.5 | P1 | Tests | test_security.py (rate limiter, input validation) | ✅ DONE (in P5.1 integration test suite) |
+|| JH3.0-P5.6 | P2 | Tests | test_migrations.py (db migration tests) | ⏳ PENDING |
+|| JH3.0-P5.7 | P2 | Tests | test_config.py (config loader) | ✅ DONE (in P5.1 integration test suite) |
+|| JH3.0-P5.8 | P1 | Deploy | Dockerfile & docker-compose.yml | ✅ DONE (Sep 18 — full Docker deploy files) |
+|| JH3.0-P5.9 | P1 | Deploy | systemd service file | ✅ DONE (Sep 18 — jarvis-hub.service) |
+|| JH3.0-P5.10 | P2 | Deploy | Nginx reverse proxy config | ⏳ PENDING |
+|| JH3.0-P5.11 | P2 | Deploy | SSL/HTTPS setup (Let's Encrypt) | ⏳ PENDING |
+|| JH3.0-P5.12 | P2 | Deploy | Pre-commit hooks + CI pipeline | ⏳ PENDING |
 
-## Summary: 38 of 84 tasks complete (45%)
+## Summary: 47 of 84 tasks complete (56%)
 
 ---
 
