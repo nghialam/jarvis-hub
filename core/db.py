@@ -260,9 +260,216 @@ class Database:
             );
 
             CREATE INDEX IF NOT EXISTS idx_broker_overview ON broker_overview(broker);
+
+            /* === JH3.0 Auth Tables (Phase 4) === */
+
+            CREATE TABLE IF NOT EXISTS users (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                username     TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+                password_hash TEXT   NOT NULL,
+                role         TEXT    NOT NULL DEFAULT 'viewer',  -- admin|analyst|viewer
+                created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                active       INTEGER DEFAULT 1,  -- 1=active, 0=disabled
+                last_login   TIMESTAMP
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+            CREATE INDEX IF NOT EXISTS idx_users_active ON users(active);
+
+            CREATE TABLE IF NOT EXISTS auth_logs (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                username      TEXT    NOT NULL,
+                action        TEXT    NOT NULL,  -- login_success|login_failed|logout|register|password_change
+                ip_address    TEXT,
+                user_agent    TEXT,
+                timestamp     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_auth_logs_username ON auth_logs(username);
+            CREATE INDEX IF NOT EXISTS idx_auth_logs_timestamp ON auth_logs(timestamp DESC);
+
+            /* === JH3.0 Event Pipeline Tables === */
+
+            -- Event audit trail (borrowed from ever-gauzy's Jitsu pattern)
+            CREATE TABLE IF NOT EXISTS events (
+                event_id TEXT PRIMARY KEY,
+                event_type TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                source TEXT NOT NULL,
+                payload TEXT,
+                timestamp TEXT NOT NULL,
+                duration_ms REAL,
+                error TEXT,
+                trace_id TEXT,
+                metadata TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
+            CREATE INDEX IF NOT EXISTS idx_events_status ON events(status);
+            CREATE INDEX IF NOT EXISTS idx_events_source ON events(source);
+            CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
+            CREATE INDEX IF NOT EXISTS idx_events_trace ON events(trace_id);
+
+            CREATE TABLE IF NOT EXISTS events_archive (
+                event_id TEXT PRIMARY KEY,
+                event_type TEXT NOT NULL,
+                status TEXT NOT NULL,
+                source TEXT NOT NULL,
+                payload TEXT,
+                timestamp TEXT NOT NULL,
+                duration_ms REAL,
+                error TEXT,
+                trace_id TEXT,
+                metadata TEXT,
+                archived_at TEXT NOT NULL
+            );
+
+            /* === JH3.0 Semantic Layer Tables === */
+
+            -- Aggregated precomputed data for dashboard queries
+            CREATE TABLE IF NOT EXISTS aggregated_data (
+                id INTEGER PRIMARY KEY,
+                ticker TEXT NOT NULL,
+                date TEXT NOT NULL,
+                close REAL,
+                open REAL,
+                high REAL,
+                low REAL,
+                volume REAL,
+                market_cap REAL,
+                ma5 REAL,
+                ma10 REAL,
+                ma20 REAL,
+                ma50 REAL,
+                ma200 REAL,
+                rsi14 REAL,
+                volume_ratio REAL,
+                price_change_pct REAL,
+                price_change_5d REAL,
+                price_change_20d REAL,
+                sector_rank INTEGER,
+                sector_avg_close_pct REAL,
+                is_uptrend BOOLEAN,
+                is_high_volume BOOLEAN,
+                is_breakout BOOLEAN,
+                UNIQUE(ticker, date)
+            );
+
+            -- Aggregate cache key/value store (for precomputed metrics)
+            CREATE TABLE IF NOT EXISTS aggregate_cache (
+                key TEXT NOT NULL PRIMARY KEY,
+                value TEXT NOT NULL,
+                computed_at TIMESTAMP NOT NULL,
+                expires_at TIMESTAMP NOT NULL
+            );
+
+            -- Market breadth (advancers/decliners per date)
+            CREATE TABLE IF NOT EXISTS market_breadth (
+                date DATE NOT NULL,
+                symbol TEXT NOT NULL,
+                close REAL,
+                prev_close REAL,
+                pct_change REAL,
+                volume REAL,
+                classification TEXT,
+                category TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_breadth_date ON market_breadth(date);
+            CREATE INDEX IF NOT EXISTS idx_breadth_symbol ON market_breadth(symbol);
+
+            /* === JH3.0 LLM Task Queue (unique key form) === */
+            -- Already exists in legacy llm_tasks with auto-increment id.
+            -- This is the unique-key form used by api/llm.py for task_id lookups.
+            CREATE TABLE IF NOT EXISTS llm_tasks_unique (
+                task_id TEXT PRIMARY KEY,
+                prompt TEXT NOT NULL,
+                fn_name TEXT NOT NULL,
+                args_json TEXT,
+                provider TEXT DEFAULT 'omlx',
+                timeout INTEGER DEFAULT 30,
+                priority TEXT DEFAULT 'normal',
+                status TEXT DEFAULT 'queued',
+                result TEXT,
+                error TEXT,
+                created_at TEXT,
+                started_at TEXT,
+                completed_at TEXT,
+                expire_at TEXT
+            );
+
+            /* === JH3.0 Enrichment Columns === */
+
+            -- Add LLM enrichment flag to market_evaluations
+            CREATE TABLE IF NOT EXISTS _jh30_meta (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            );
         """)
         self._conn.commit()
+        self._jh30_enrich_columns()
         print("[DB] Initialized %s" % self.db_path)
+        
+        # Seed initial admin user if no users exist
+        self._seed_admin_user()
+
+    def _seed_admin_user(self):
+        """Create a default admin user if no users exist in the database."""
+        try:
+            import hashlib
+            import secrets
+            
+            c = self._c()
+            c.execute("SELECT COUNT(*) FROM users")
+            count = c.fetchone()[0]
+            if count > 0:
+                return  # Users already exist, don't seed
+            
+            # Create default admin user
+            salt = secrets.token_hex(16)
+            password_hash = hashlib.sha256((salt + "admin123").encode()).hexdigest()
+            password_entry = f"{salt}:{password_hash}"
+            
+            c.execute(
+                "INSERT INTO users (username, password_hash, role, active) VALUES (?, ?, ?, ?)",
+                ("admin", password_entry, "admin", 1)
+            )
+            self._conn.commit()
+            print("[DB] Seeded default admin user (username: admin, password: admin123)")
+            
+        except Exception as e:
+            print("[DB] WARN: Failed to seed admin user: %s" % e)
+
+    def _jh30_enrich_columns(self):
+        """Add JH3.0 enrichment columns to existing tables (additive, safe to re-run)."""
+        c = self._c()
+        try:
+            # market_evaluations → add heuristic_eval, llm_eval
+            c.execute("SELECT name FROM pragma_table_info('market_evaluations') WHERE name='heuristic_eval'")
+            if not c.fetchone():
+                c.execute("ALTER TABLE market_evaluations ADD COLUMN heuristic_eval TEXT")
+                c.execute("ALTER TABLE market_evaluations ADD COLUMN llm_eval TEXT")
+                print("[DB] Added heuristic_eval, llm_eval to market_evaluations")
+
+            # market_intelligence → add llm_task_id
+            c.execute("SELECT name FROM pragma_table_info('market_intelligence') WHERE name='llm_task_id'")
+            if not c.fetchone():
+                c.execute("ALTER TABLE market_intelligence ADD COLUMN llm_task_id TEXT")
+                print("[DB] Added llm_task_id to market_intelligence")
+
+            # market_cache → add last_refreshed
+            c.execute("SELECT name FROM pragma_table_info('market_cache') WHERE name='last_refreshed'")
+            if not c.fetchone():
+                c.execute("ALTER TABLE market_cache ADD COLUMN last_refreshed TIMESTAMP")
+                print("[DB] Added last_refreshed to market_cache")
+
+            # portfolio_transactions → add category
+            c.execute("SELECT name FROM pragma_table_info('portfolio_transactions') WHERE name='category'")
+            if not c.fetchone():
+                c.execute("ALTER TABLE portfolio_transactions ADD COLUMN category TEXT")
+                print("[DB] Added category to portfolio_transactions")
+
+            self._conn.commit()
+        except Exception as e:
+            print("[DB] WARN: JH3.0 enrichment failed: %s" % e)
 
     # -- helpers ---------------------------------------------------------------
 

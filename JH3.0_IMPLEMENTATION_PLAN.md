@@ -1,8 +1,9 @@
 # Jarvis Hub 3.0 — Implementation Plan
 **Version:** 3.0.0-draft  
 **Date:** 2026-08-24  
-**Status:** Planning  
-**Estimated Duration:** 10-14 weeks (5 phases, ~25-35 story points)
+**Status:** In Progress — Phase 3 Partially Complete  
+**Last Updated:** 2026-09-18  
+**Estimated Duration:** 11-16 weeks (5 phases, ~28-40 story points)
 
 ---
 
@@ -33,9 +34,92 @@ This plan details the step-by-step implementation of Jarvis Hub 3.0, transformin
 | Heuristic fallbacks | Exist but not wired | Wired by default | 1 week |
 | Async LLM calls | Synchronous, blocking | Async queue | 2 weeks |
 
----
+### 1.3 Architecture Patterns (Borrowed from ever-gauzy)
 
-## 2. Phase Breakdown
+Two patterns from ever-gauzy are feasible to adopt for JH3.0. Both are **lightweight adaptations** — no heavy infrastructure.
+
+#### Pattern 1: Event-Driven Data Pipeline
+
+**Source:** ever-gauzy uses Jitsu event collection to log every data pipeline tick.
+
+**JH3.0 adaptation:**
+- **Event schema** (SQLite table `events`):
+  - `id`, `name` (event type), `source` (cron job / API / manual), `status` (success/error/timeout),
+    `payload` (JSON blob), `start_time`, `end_time`, `duration_ms`, `error_trace`, `created_at`
+- **Event bus** (`core/events.py`): Async queue → background worker → SQLite insert.
+  Same pattern as existing `core/async_queue.py` but with event log, not LLM tasks.
+- **Pipeline events**: market snapshot, stock data pull, analysis tick, summary generation — each emits an `EVENT_TYPE` event.
+- **Event viewer**: simple /admin/events page with filter (source, status, date range), sort, and duration chart.
+
+**Why:** Full audit trail of data flow. See which cron failed, how long, what error. Critical for reliability.
+
+**Not needed:** No Redis, no RabbitMQ, no Kafka. SQLite + async queue is sufficient for solo dev + <100 events/day.
+
+#### Pattern 2: Semantic Layer for Analytics
+
+**Source:** ever-gauzy uses Cube.js semantic layer for unified analytics queries.
+
+**JH3.0 adaptation:**
+- **Semantic view** (`core/semantic.py`): Python layer that:
+  1. Takes raw data from multiple sources (vnstock, vnai, web APIs)
+  2. Normalizes into unified schema
+  3. Precomputes derived metrics (MA20, RSI, volume ratio, price change %, sector ranking)
+  4. Exposes typed query methods: `get_stock_profile(ticker)`, `get_sector_snapshot(date)`, `get_top_movers(date)`
+
+- **Table structure** (`aggregated_data`):
+  - `ticker`, `date`, `close`, `open`, `high`, `low`, `volume`, `market_cap`
+  - `ma5`, `ma10`, `ma20`, `ma50`, `rsi14`, `volume_ratio`, `price_change_pct`
+  - `sector_rank`, `sector_avg_close_pct`, `is_uptrend` (boolean), `is_high_volume` (boolean)
+- **Precompute scheduler** (`core/precompute.py`): runs daily after market close (16:00), batches all calculations in one pass.
+- **Semantic views** on top of raw + aggregated tables for dashboard queries.
+
+**Why:** DRY — computed columns calculated once, not per-request. Consistent numbers everywhere (all dashboards show same MA20). 10-50x faster on repeated queries.
+
+**Not needed:** No Cube.js server, no GraphQL. Python functions + SQLite views are lighter and more maintainable for a single developer.
+
+### ✅ Pattern Evaluation Results
+
+Pattern 1 (Event-Driven Pipeline) — ✅ **Áp dụng được**
+- Lightweight adaptation: SQLite + async queue, không cần Redis/RabbitMQ/Kafka
+- Full audit trail cho mọi data pipeline tick (cron/API/manual)
+- Event viewer page với filter, duration chart, error drill-down
+- Đánh giá: ✅ Fits solo dev constraints, <100 events/day, SQLite sufficient
+
+Pattern 2 (Semantic Layer) — ✅ **Áp dụng được**
+- Python functions + SQLite views thay vì Cube.js server
+- Precompute daily: MA5/10/20/50/200, RSI14, volume ratio, sector ranking
+- UNIQUE: No external server dependency, 10-50x faster repeated queries
+- Đánh giá: ✅ Eliminates DRY violations, consistent dashboard numbers, zero new infra
+
+#### Phase 3 Addition
+
+These patterns are added to Phase 3 (Architecture):
+
+| # | Task | Description | Est. | Dependencies |
+|---|------|-------------|------|--------------|
+| 3.12 | Event pipeline | `core/events.py`, `events` table, event viewer page | 2d | 3.8 | ✅ Complete |
+| 3.13 | Semantic layer | `core/semantic.py`, aggregated_data table, precompute scheduler | 3d | 3.8 | ✅ Complete |
+
+#### Scope — What We Do NOT Adopt
+
+- ❌ Monorepo / pnpm workspaces (we're Python, not Node.js)
+- ❌ NestJS / Angular (we use Flask + Jinja + vanilla JS)
+- ❌ Electron desktop bundling (we're a web dashboard)
+- ❌ Microservices decomposition (solo dev, single deploy target)
+- ❌ Redis, OpenSearch, MinIO (SQLite handles all for our scale)
+- ❌ Cube.js server / Jitsu (Python implementations are lighter and more maintainable for solo dev)
+
+### 1.4 Design Principles
+
+1. **Event-driven over polling** — Cron jobs emit events, not fire-and-forget
+2. **Semantic over raw** — Precompute derived metrics, expose unified views
+3. **Non-destructive migration** — v2.0 continues to work during transition
+4. **Feature flags** — New features enabled progressively via config
+5. **Backward compatibility** — All v2.0 API routes continue to work
+6. **Database forward-compatible** — v3.0 schema is additive only
+7. **Progressive enhancement** — System degrades gracefully at every level
+
+## 2. Implementation Phases
 
 ### Phase 1: Foundation — Stabilize & Clean (Week 1-2)
 
@@ -110,7 +194,7 @@ This plan details the step-by-step implementation of Jarvis Hub 3.0, transformin
 
 **Goal:** Split `app.py` into blueprints. Clean codebase. Proper separation of concerns.
 
-#### Story Points: 7-10
+#### Story Points: 9-14
 
 | # | Task | Description | Est. | Dependencies |
 |---|------|-------------|------|--------------|
@@ -125,21 +209,25 @@ This plan details the step-by-step implementation of Jarvis Hub 3.0, transformin
 | 3.9 | Migrate `/api/intelligence/*` routes | Market intelligence, AI intelligence, pipeline | 2d | 3.1 |
 | 3.10 | Migrate `/api/llm/*` routes | Task management, health | 1d | 3.1 |
 | 3.11 | Migrate `/api/main/*` routes | Health, overview, logs | 1d | 3.1 |
-| 3.12 | Create `services/` layer | MarketService, NewsService, PortfolioService, ResearchService | 1d | — |
-| 3.13 | Create `gateways/` layer | MarketGateway, NewsGateway (LLMGateway in 2.2) | 1d | 3.12 |
-| 3.14 | Create `workers/` layer | Scheduler, AlertMonitor | 0.5d | — |
-| 3.15 | Update entry point `app.py` | Register blueprints, middleware, config | 0.5d | 3.1-3.14 |
-| 3.16 | API route redirect layer | Old v2.0 routes → new v3.0 routes (backward compat) | 0.5d | 3.1-3.14 |
+| 3.12 | Add event-driven pipeline | `core/events.py`, `events` table, event viewer — audit trail for all data pipeline ticks | 2d | 2.12 |
+| 3.13 | Add semantic layer | `core/semantic.py`, `aggregated_data` table, precompute scheduler — unified query abstraction for computed metrics | 3d | 2.12 |
+| 3.14 | Create `services/` layer | MarketService, NewsService, PortfolioService, ResearchService | 1d | — |
+| 3.15 | Create `gateways/` layer | MarketGateway, NewsGateway (LLMGateway in 2.2) | 1d | 3.14 |
+| 3.16 | Create `workers/` layer | Scheduler, AlertMonitor | 0.5d | — |
+| 3.17 | Update entry point `app.py` | Register blueprints, middleware, config | 0.5d | 3.1-3.16 |
+| 3.18 | API route redirect layer | Old v2.0 routes → new v3.0 routes (backward compat) | 0.5d | 3.1-3.16 |
 
-**Deliverable:** Clean, modular architecture. All routes organized in blueprints. All v2.0 features preserved. Backward compatible.
+**Deliverable:** Clean, modular architecture. All routes organized in blueprints. Event pipeline + semantic layer implemented. All v2.0 features preserved. Backward compatible.
 
 **Acceptance Criteria:**
-- [ ] `app.py` <200 lines (entry point only)
-- [ ] All routes organized in blueprints under `api/` (11 blueprints)
-- [ ] Service layer separates business logic from routing
-- [ ] Gateway layer abstracts external data sources
-- [ ] All v2.0 routes still work (redirect to v3.0)
-- [ ] No duplicate route definitions
+- [x] `app.py` <200 lines (entry point only) ✅
+- [x] All routes organized in blueprints under `api/` (11 blueprints) ✅
+- [x] Event pipeline with audit trail ✅
+- [x] Semantic layer with precomputed indicators ✅
+- [ ] Service layer separates business logic from routing (partial)
+- [ ] Gateway layer abstracts external data sources (partial)
+- [x] All v2.0 routes still work (redirect to v3.0) ✅
+- [x] No duplicate route definitions ✅
 
 ---
 
@@ -235,11 +323,13 @@ Phase 2: Async Queue (Week 3-4)
 Phase 3: Architecture (Week 5-6)
   ├── 3.1 Blueprint structure ───────────────────┼──► Phase 4
   ├── 3.2-3.7 Migrate routes ────────────────────┼──► Phase 4
-  ├── 3.8 Services layer ────────────────────────┼──► Phase 4
-  ├── 3.9 Gateways layer ────────────────────────┼──► Phase 4
-  ├── 3.10 Workers layer ────────────────────────┼──► Phase 4
-  ├── 3.11 Entry point ──────────────────────────┼──► Phase 4
-  └── 3.12 Route redirect layer ─────────────────┴──► Phase 4
+  ├── 3.12 Event pipeline ───────────────────────┼──► Phase 4 (audit)
+  ├── 3.13 Semantic layer ───────────────────────┼──► Phase 4 (analytics)
+  ├── 3.14 Services layer ───────────────────────┼──► Phase 4
+  ├── 3.15 Gateways layer ───────────────────────┼──► Phase 4
+  ├── 3.16 Workers layer ────────────────────────┼──► Phase 4
+  ├── 3.17 Entry point ──────────────────────────┼──► Phase 4
+  └── 3.18 Route redirect layer ─────────────────┴──► Phase 4
 
 Phase 4: Security (Week 7-8)
   ├── 4.1 Authentication ────────────────────────┼──► Phase 5
@@ -366,6 +456,8 @@ Phase 1 (Foundation)
 | LLM failure impact | System hangs | Immediate fallback to heuristic | `/api/analyze?symbol=VCB` with LLM down |
 | Heuristic fallback usage | 0% | 100% of endpoints | All endpoints return data without LLM |
 | System uptime without LLM | ~60% | 100% | Monitor `/api/v1/health/llm` |
+| Event audit trail | None | All pipeline ticks logged | `events` table query |
+| Semantic consistency | Duplicated across dashboards | Single precomputed source | Compare dashboard outputs |
 | Database file count | 3 | 1 | `ls *.db` |
 | Code complexity | 84 routes in 1 file | Modular blueprints | `wc -l app.py` < 200 |
 | Test coverage | 0% | >60% | `pytest --cov` |

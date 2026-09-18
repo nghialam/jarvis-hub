@@ -331,6 +331,16 @@
                 <span class="nav-icon">💼</span>
                 <span>Portfolio</span>
             </a>
+            <div style="margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border-color);">
+                <div style="padding: 8px 12px; font-size: 12px; color: var(--text-muted);">
+                    Logged in as <strong id="current-user" style="color: var(--accent);"></strong>
+                </div>
+                <form method="POST" action="/hub2/logout" style="padding: 0 12px;">
+                    <button type="submit" style="width: 100%; padding: 8px; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 6px; color: #fca5a5; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                        <span>🚪</span> <span>Logout</span>
+                    </button>
+                </form>
+            </div>
         </nav>
     </div>
 
@@ -518,6 +528,20 @@
                                 <div class="hub-status-value" id="status-db-text">Checking...</div>
                             </div>
                         </div>
+
+                        <!-- Async Task Status -->
+                        <div id="async-task-container" style="margin-top: 20px;">
+                            <h3 style="font-size: 16px; margin: 0 0 12px 0; color: var(--text-secondary);">Async Tasks</h3>
+                            <div id="task-list" style="display: flex; flex-direction: column; gap: 8px;">
+                                <div id="task-status-container">
+                                    <div style="color: var(--text-muted); font-size: 13px; padding: 8px 0;">No active tasks</div>
+                                </div>
+                            </div>
+                            <div style="margin-top: 12px; display: flex; gap: 8px;">
+                                <button onclick="refreshTasks()" style="padding: 6px 12px; background: var(--accent); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">Refresh</button>
+                                <button onclick="clearTasks()" style="padding: 6px 12px; background: var(--panel-bg); color: var(--text-secondary); border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; font-size: 12px;">Clear</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -536,6 +560,34 @@
     <script src="/static/js/app.js"></script>
     <script src="/static/js/async_tasks.js"></script>
     <script>
+        // Auth Token (from Flask session)
+        var AUTH_USER = {{ current_user | tojson }};
+        var AUTH_TOKEN = AUTH_USER.token || null;
+        var AUTH_ROLE = AUTH_USER.role || null;
+        
+        // Set user display
+        if (AUTH_USER.username) {
+            document.getElementById('current-user').textContent = AUTH_USER.username + ' (' + AUTH_ROLE + ')';
+        }
+        
+        // Auth-aware fetch wrapper
+        async function authFetch(url, options = {}) {
+            const headers = {
+                ...(options.headers || {}),
+                'Content-Type': 'application/json',
+            };
+            if (AUTH_TOKEN) {
+                headers['Authorization'] = 'Bearer ' + AUTH_TOKEN;
+            }
+            const response = await fetch(url, { ...options, headers });
+            if (response.status === 401) {
+                // Token expired or invalid - redirect to login
+                window.location.href = '/hub2/login';
+                return null;
+            }
+            return response;
+        }
+        
         // Hub Landing Page Logic
         document.addEventListener('DOMContentLoaded', function () {
             // Load overview stats
@@ -546,7 +598,8 @@
         async function loadHubStats() {
             try {
                 // Load market stats
-                const marketRes = await fetch('/api/indices');
+                const marketRes = await authFetch('/api/indices');
+                if (!marketRes) return;
                 const marketData = await marketRes.json();
                 if (marketData.indices) {
                     document.getElementById('stat-indices').textContent = marketData.indices.length;
@@ -557,7 +610,8 @@
                 }
 
                 // Load news stats
-                const newsRes = await fetch('/api/articles');
+                const newsRes = await authFetch('/api/articles');
+                if (!newsRes) return;
                 const newsData = await newsRes.json();
                 if (newsData.articles) {
                     document.getElementById('stat-news').textContent = newsData.articles.length;
@@ -565,7 +619,8 @@
                 }
 
                 // Load company stats
-                const companyRes = await fetch('/api/v1/companies?ticker=VIC');
+                const companyRes = await authFetch('/api/v1/companies?ticker=VIC');
+                if (!companyRes) return;
                 const companyData = await companyRes.json();
                 if (companyData.companies) {
                     document.getElementById('stat-companies').textContent = companyData.companies.length;
@@ -575,7 +630,8 @@
                 }
 
                 // Load research stats
-                const researchRes = await fetch('/api/v1/research/reports');
+                const researchRes = await authFetch('/api/v1/research/reports');
+                if (!researchRes) return;
                 const researchData = await researchRes.json();
                 if (researchData.reports) {
                     document.getElementById('stat-reports').textContent = researchData.reports.length;
@@ -584,14 +640,16 @@
                 }
 
                 // Load screener stats
-                const screenerRes = await fetch('/api/watchlist');
+                const screenerRes = await authFetch('/api/watchlist');
+                if (!screenerRes) return;
                 const screenerData = await screenerRes.json();
                 if (screenerData.watchlist) {
                     document.getElementById('stat-watchlist').textContent = screenerData.watchlist.length;
                 }
 
                 // Load market intel stats
-                const intelRes = await fetch('/api/market-intel');
+                const intelRes = await authFetch('/api/market-intel');
+                if (!intelRes) return;
                 const intelData = await intelRes.json();
                 if (intelData.sentiment) {
                     document.getElementById('stat-sentiment').textContent = intelData.sentiment;
@@ -604,7 +662,8 @@
 
         async function checkSystemStatus() {
             try {
-                const health = await fetch('/api/health');
+                const health = await authFetch('/api/health');
+                if (!health) return;
                 const data = await health.json();
 
                 if (data.status === 'ok') {
@@ -624,6 +683,77 @@
                 document.getElementById('status-backend').className = 'hub-status-indicator offline';
             }
         }
+
+        // === Async Task UI Integration ===
+        
+        async function refreshTasks() {
+            try {
+                const res = await authFetch('/api/v1/llm/tasks?limit=20');
+                if (!res) return;
+                const data = await res.json();
+                
+                const container = document.getElementById('task-status-container');
+                if (!data.tasks || data.tasks.length === 0) {
+                    container.innerHTML = '<div style="color: var(--text-muted); font-size: 13px; padding: 8px 0;">No active tasks</div>';
+                    return;
+                }
+
+                let html = '';
+                data.tasks.forEach(task => {
+                    const statusClass = task.status === 'completed' ? 'completed' : 
+                                       task.status === 'failed' ? 'failed' : 
+                                       task.status === 'processing' ? 'processing' : 'pending';
+                    const statusIcon = task.status === 'completed' ? '✓' : 
+                                      task.status === 'failed' ? '✗' : 
+                                      task.status === 'processing' ? '⏳' : '⏸';
+                    const statusText = task.status.charAt(0).toUpperCase() + task.status.slice(1);
+                    
+                    html += `
+                        <div style="background: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <span style="font-weight: 500; font-size: 13px;">${escapeHtml(task.task_type)}</span>
+                                    <span style="color: var(--text-muted); font-size: 11px; margin-left: 8px;">${task.task_id}</span>
+                                </div>
+                                <span class="task-status ${statusClass}" style="font-size: 12px; padding: 2px 8px; border-radius: 4px; background: ${getStatusColor(task.status)};">
+                                    ${statusIcon} ${statusText}
+                                </span>
+                            </div>
+                            ${task.error ? `<div style="color: #ef4444; font-size: 11px; margin-top: 6px; font-family: monospace;">Error: ${escapeHtml(task.error)}</div>` : ''}
+                            ${task.completed_at ? `<div style="color: var(--text-muted); font-size: 11px; margin-top: 4px;">Completed: ${new Date(task.completed_at).toLocaleTimeString()}</div>` : ''}
+                        </div>
+                    `;
+                });
+                container.innerHTML = html;
+            } catch (e) {
+                console.error('Failed to refresh tasks:', e);
+            }
+        }
+
+        function clearTasks() {
+            document.getElementById('task-status-container').innerHTML = '<div style="color: var(--text-muted); font-size: 13px; padding: 8px 0;">No active tasks</div>';
+        }
+
+        function getStatusColor(status) {
+            switch (status) {
+                case 'completed': return '#05966920';
+                case 'failed': return '#ef444420';
+                case 'processing': return '#f59e0b20';
+                default: return '#6b728020';
+            }
+        }
+
+        function escapeHtml(text) {
+            if (typeof text !== 'string') return text;
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Auto-refresh tasks every 5 seconds
+        setInterval(refreshTasks, 5000);
+        // Initial load
+        refreshTasks();
     </script>
 </body>
 

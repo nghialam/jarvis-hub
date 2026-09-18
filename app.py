@@ -11,10 +11,11 @@ import os
 import re
 import sys
 import threading
+from functools import wraps
 from datetime import datetime, timedelta
 
 import requests
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 try:
     from apscheduler.schedulers.background import BackgroundScheduler
     from apscheduler.triggers.cron import CronTrigger
@@ -82,9 +83,11 @@ app = Flask(
     template_folder=os.path.join(SCRIPT_DIR, "dashboard", "templates"),
     static_folder=os.path.join(SCRIPT_DIR, "dashboard", "static"),
 )
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(32).hex())
 
 config = None
 db = None
+event_store = None
 _fresh_cache = {}
 
 _cache_lock = threading.Lock()
@@ -216,7 +219,7 @@ def _start_scheduler():
         _scheduler.add_job(
             func=_run_market_intelligence_pipeline,
             trigger="cron",
-            hour=[6, 12, 18, 0],
+            hour='6,12,18,0',
             minute=0,
             id="market_intelligence_pipeline",
             replace_existing=True,
@@ -258,6 +261,7 @@ def _init():
        5. Start APScheduler (MI cron jobs)
        6. Kick off initial data refresh in a background thread
      """
+     global event_store
      _load_config()
      _load_db()
 
@@ -282,17 +286,30 @@ def _init():
      except Exception as e:
          print("[BOOT] Security init failed: %s" % e)
 
+     # Phase 2.1: Init EventStore (audit trail for all pipeline ticks)
+     try:
+         from core.events import EventStore
+         import os
+         _jh30_db_path = config.get("db_path", ":memory:") if config else ":memory:"
+         if not _jh30_db_path or _jh30_db_path == ":memory:":
+             _jh30_db_path = os.path.join(os.path.dirname(__file__), "data", "jarvis.db")
+         event_store = EventStore(_jh30_db_path)
+         print("[BOOT] EventStore initialized")
+     except Exception as e:
+         print("[BOOT] EventStore init failed: %s" % e)
+         event_store = None
+
      # Phase 2: warm the async task queue (starts worker threads)
      try:
          from core.async_queue import get_async_queue
-         get_async_queue()
+         get_async_queue(event_store=event_store)
      except Exception as e:
          print("[BOOT] Async queue init failed: %s" % e)
 
      # Phase 2.12: precompute scheduler (queues LLM tasks on data refresh)
      try:
          from core.precompute_scheduler import get_precompute_scheduler
-         _pre = get_precompute_scheduler()
+         _pre = get_precompute_scheduler(db_path=_jh30_db_path, event_store=event_store)
          _pre.data_refresh = _refresh_data  # actually refresh market data each cycle
      except Exception as e:
          print("[BOOT] Precompute scheduler init failed: %s" % e)
@@ -312,10 +329,103 @@ def index():
     return render_template("index.html")
 
 
+# --- Auth Guard for Dashboard ---
+
+def _check_auth():
+    """Check for valid auth token. Returns (user, None) or redirects to /hub2/login."""
+    from flask import session
+    user = session.get("user")
+    if user:
+        return user, None
+    return None, None
+
+
+def _require_auth(f):
+    """Decorator that checks session auth for dashboard pages."""
+    from flask import session, redirect, render_template
+    
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        user = session.get("user")
+        if not user:
+            return render_template("login.html")
+        return f(*args, **kwargs)
+    
+    return decorated_function
+
+
+@_require_auth
 @app.route("/hub2")
 def hub2():
     """Jarvis Hub 2.0 — Market Intelligence Portal."""
-    return render_template("hub2.html")
+    from flask import session
+    user = session.get("user", {})
+    return render_template("hub2.html", current_user=user)
+
+
+@app.route("/hub2/login", methods=["GET", "POST"])
+def hub2_login():
+    """Login page for dashboard."""
+    from flask import session, redirect, url_for, request
+    
+    if request.method == "POST":
+        data = request.form
+        username = data.get("username", "").strip()
+        password = data.get("password", "")
+        
+        if not username or not password:
+            return render_template("login.html", error="Username and password are required")
+        
+        try:
+            from core.auth import AuthService
+            auth = AuthService()
+            result = auth.login(username, password)
+            if result:
+                session["user"] = {
+                    "username": result["username"],
+                    "role": result["role"],
+                    "token": result["token"],
+                }
+                # Log successful login
+                _log_auth_event(username, "login_success")
+                return redirect(url_for("hub2"))
+        except Exception as e:
+            pass
+        
+        _log_auth_event(username, "login_failed")
+        return render_template("login.html", error="Invalid credentials")
+    
+    return render_template("login.html", error=None)
+
+
+@app.route("/hub2/logout", methods=["POST"])
+def hub2_logout():
+    """Logout and clear session."""
+    from flask import session
+    token = session.get("user", {}).get("token")
+    if token:
+        try:
+            from core.auth import AuthService
+            auth = AuthService()
+            auth.logout(token)
+        except Exception:
+            pass
+    session.clear()
+    return redirect(url_for("hub2_login"))
+
+
+def _log_auth_event(username, action):
+    """Log auth event to database."""
+    try:
+        from flask import request
+        if db:
+            db._conn.execute(
+                "INSERT INTO auth_logs (username, action, ip_address, user_agent) VALUES (?, ?, ?, ?)",
+                (username, action, request.remote_addr, request.headers.get("User-Agent", "")[:500])
+            )
+            db._conn.commit()
+    except Exception as e:
+        print("[AUTH] Failed to log auth event: %s" % e)
 
 
 @app.route("/api/search", methods=["GET"])

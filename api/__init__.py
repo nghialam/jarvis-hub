@@ -26,6 +26,7 @@ def register_blueprints(app):
     from api.portfolio import portfolio_bp
     from api.llm import llm_bp
     from api.auth import auth_bp
+    from api.events import bp as events_bp
 
     # Register blueprints with correct url_prefixes
     app.register_blueprint(main_bp, url_prefix="/")
@@ -38,6 +39,7 @@ def register_blueprints(app):
     app.register_blueprint(portfolio_bp, url_prefix="/api/v1/portfolio")
     app.register_blueprint(llm_bp, url_prefix="/api/v1/llm")
     app.register_blueprint(auth_bp, url_prefix="/api/v1/auth")
+    app.register_blueprint(events_bp, url_prefix="/api/v1/events")
 
     # Collect all routes that blueprints already own (to avoid duplicates)
     existing_routes = set()

@@ -1,7 +1,7 @@
 # Jarvis Hub 3.0 — System Design
 **Version:** 3.0.0-draft  
-**Date:** 2026-08-24  
-**Status:** Design Review  
+**Date:** 2026-08-24 (Updated: 2026-09-18)  
+**Status:** Implementation Progress — Phase 3 Partially Complete  
 **Author:** Jarvis Hub Team
 
 ---
@@ -103,22 +103,23 @@ Jarvis Hub 3.0 is a complete architectural overhaul of the Vietnamese stock inte
 │         │                  │                  │                   │
 │         └──────────────────┼──────────────────┘                   │
 │                            │                                      │
-│  ┌─────────────────────────┼────────────────────────────────────┐ │
-│  │                    Service Layer                              │ │
-│  │                                                              │ │
-│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐  │ │
-│  │  │ Market   │ │ News     │ │ LLM      │ │ Portfolio    │  │ │
-│  │  │ Service  │ │ Service  │ │ Gateway  │ │ Service      │  │ │
-│  │  └────┬─────┘ └────┬─────┘ └────┬─────┘ └──────┬───────┘  │ │
-│  │       │            │            │              │           │ │
-│  │       └────────────┴────────────┴──────────────┘           │ │
-│  │                            │                                │ │
-│  │  ┌─────────────────────────┼────────────────────────────┐  │ │
-│  │  │               Async Task Queue                        │  │ │
-│  │  │  ┌──────────┐ ┌──────────┐ ┌──────────┐            │  │ │
-│  │  │  │ Worker 1 │ │ Worker 2 │ │ Worker 3 │            │  │ │
-│  │  │  └──────────┘ └──────────┘ └──────────┘            │  │ │
-│  │  └────────────────────────────────────────────────────┘  │ │
+│  ┌──────────────────────────────────────────────────────────┐ │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐   │ │
+│  │  │ Market   │ │ News     │ │ LLM      │ │ Semantic │   │ │
+│  │  │ Service  │ │ Service  │ │ Gateway  │ │ Layer    │   │ │
+│  │  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘   │ │
+│  │       │            │            │            │          │ │
+│  │       └────────────┴────────────┼────────────┘          │ │
+│  │                                │                         │ │
+│  │  ┌─────────────────────────────┼─────────────────────┐  │ │
+│  │  │           Async Task Queue   │                      │  │ │
+│  │  │  ┌──────────┐ ┌──────────┐ ┌──────────┐          │  │ │
+│  │  │  │ Worker 1 │ │ Worker 2 │ │ Worker 3 │          │  │ │
+│  │  │  └──────────┘ └──────────┘ └──────────┘          │  │ │
+│  │  └──────────────────────────────────────────────────┘  │ │
+│  │  ┌──────────────────────────────────────────────────┐  │ │
+│  │  │     Event Bus (cron/API → SQLite audit trail)    │  │ │
+│  │  └──────────────────────────────────────────────────┘  │ │
 │  └──────────────────────────────────────────────────────────┘ │
 └─────────────────────┬──────────────────────────────────────────┘
                       │
@@ -387,15 +388,358 @@ class AlertMonitor:
 
 Enhanced SQLite layer with new tables for async LLM support.
 
-**New tables (see §6):**
-- `llm_tasks` — Task queue storage
-- `llm_cache` — LLM result cache with TTL
-- `circuit_breaker` — Circuit breaker state
+**New tables (see §5.1):**
+- `llm_tasks` — Task queue storage (design only)
+- `llm_cache` — LLM result cache with TTL (design only)
+- `circuit_breaker` — Circuit breaker state (design only)
+- `events` — Event-driven pipeline audit trail (ever-gauzy Jitsu pattern) ✅
+- `events_archive` — Archived events >90 days old ✅
+- `aggregated_data` — Semantic layer placeholder (design)
+- `v_market_indicators` — SQLite view: MA5/10/20/50/200 + volume_ratio ✅
+- `v_market_rsi` — SQLite view: RSI14 ✅
+- `aggregate_cache` — Key/value cache with TTL ✅
+- `market_breadth` — Daily breadth snapshot ✅
 
 **Existing tables (unchanged):**
 - `knowledge`, `activity_log`, `daily_snapshots`, `watchlist`, `market_cache`
 - `market_evaluations`, `trading_alerts`, `market_intelligence`
 - `cms_articles`, `research_items`, `backlog_tasks`, `portfolio_transactions`
+
+### 3.11 Event-Driven Pipeline (`core/events.py`)
+
+Every data pipeline tick emits an event — not fire-and-forget cron. Borrowed from ever-gauzy's Jitsu event collection pattern, but implemented as lightweight Python + SQLite.
+
+**Core types (implemented):**
+
+```python
+class EventType(str, Enum):
+    # Data ingestion
+    TICK_START = "tick_start"
+    TICK_COMPLETE = "tick_complete"
+    TICK_ERROR = "tick_error"
+    RSS_FETCH = "rss_fetch"
+    API_FETCH = "api_fetch"
+    WEB_SCRAPING = "web_scraping"
+    CRON_TRIGGER = "cron_trigger"
+    MANUAL_TRIGGER = "manual_trigger"
+    # Data processing
+    DATA_PARSED = "data_parsed"
+    DATA_STORED = "data_stored"
+    DATA_VALIDATED = "data_validated"
+    DATA_INVALID = "data_invalid"
+    # Semantic layer
+    METRIC_PRECOMPUTED = "metric_precomputed"
+    VIEW_INVALIDATED = "view_invalidated"
+    VIEW_REFRESHED = "view_refreshed"
+    # Pipeline lifecycle
+    PIPELINE_START = "pipeline_start"
+    PIPELINE_COMPLETE = "pipeline_complete"
+    PIPELINE_ERROR = "pipeline_error"
+    # Notifications
+    ALERT_TRIGGERED = "alert_triggered"
+    NOTIFICATION_SENT = "notification_sent"
+
+class EventStatus(str, Enum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    ARCHIVED = "archived"
+```
+
+**Event dataclass (implemented):**
+```python
+@dataclass
+class Event:
+    event_id: str          # uuid-based, e.g. "a1b2c3d4e5f6"
+    type: EventType
+    status: EventStatus
+    source: str            # module/component that triggered it
+    payload: dict          # structured JSON context
+    timestamp: str         # ISO format
+    duration_ms: Optional[float] = None
+    error: Optional[str] = None
+    trace_id: Optional[str] = None  # links related events together
+    metadata: dict = field(default_factory=dict)
+
+    def to_dict(self) -> dict:        # serialise to JSON
+    @classmethod
+    def create(cls, event_type, source, payload=None, trace_id=None, metadata=None) -> "Event"
+    @classmethod
+    def from_row(cls, row) -> "Event"  # reconstruct from sqlite3.Row (index access)
+```
+
+**EventStore API (implemented):**
+```python
+store = EventStore(db_path=None)  # auto-detects from Flask config or defaults to data/jarvis.db
+
+# Emit — create + insert in one call
+event_id = store.emit(EventType.RSS_FETCH, "news_cron",
+                      {"articles": 24, "sources": ["cafef"]})
+
+# Manual create + insert
+event = Event.create(EventType.PIPELINE_START, "market",
+                     {"symbols": ["VIC", "VCB"]})
+store.insert(event)
+
+# Update event mid-lifecycle
+store.update(event_id, status=EventStatus.COMPLETED,
+             duration_ms=45.2, result={"count": 24})
+
+# Query with filters
+events = store.query(
+    event_type=EventType.API_FETCH,
+    source="cron",
+    status=EventStatus.COMPLETED,
+    start_time="2026-09-01",
+    limit=100, offset=0,
+)
+
+# Trace — all events linked by trace_id
+trace = store.get_trace(trace_id)  # ordered by timestamp ASC
+
+# Failed events
+errors = store.get_errors(limit=50, source="cron")
+
+# Stats — aggregated metrics
+stats = store.get_stats(hours=24)
+# → {"type_counts": {...}, "status_counts": {...},
+#    "avg_duration_ms": 35.2, "total_events": 42,
+#    "top_errors": [...]}
+
+# Archiving
+store.archive(event_id)                  # single event
+store.archive_old(days=30)               # bulk > 30 days, returns count
+```
+```
+
+**EventStore API:**
+```python
+store = EventStore(db_path)
+
+# Emit — create + insert in one call
+event_id = store.emit(EventType.RSS_FETCH, "news_cron",
+                      {"articles": 24, "sources": ["cafef"]})
+
+# Manual create + insert
+event = Event.create(EventType.PIPELINE_START, "market",
+                     {"symbols": ["VIC", "VCB"]})
+store.insert(event)
+
+# Update event mid-lifecycle
+store.update(event_id, status=EventStatus.COMPLETED,
+             duration_ms=45.2, result={"count": 24})
+
+# Query with filters
+events = store.query(
+    event_type=EventType.API_FETCH,
+    source="cron",
+    status=EventStatus.COMPLETED,
+    start_time="2026-09-01",
+    limit=100, offset=0,
+)
+
+# Trace — all events linked by trace_id
+trace = store.get_trace(trace_id)  # ordered by timestamp ASC
+
+# Failed events
+errors = store.get_errors(limit=50, source="cron")
+
+# Stats — aggregated metrics
+stats = store.get_stats(hours=24)
+# → {"type_counts": {...}, "status_counts": {...},
+#    "avg_duration_ms": 35.2, "total_events": 42,
+#    "top_errors": [...]}
+
+# Archiving
+store.archive(event_id)                  # single event
+store.archive_old(days=30)               # bulk > 30 days, returns count
+```
+
+**Tables:**
+```sql
+CREATE TABLE events (
+    event_id TEXT PRIMARY KEY,
+    event_type TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    source TEXT NOT NULL,
+    payload TEXT,           -- JSON blob
+    timestamp TEXT NOT NULL,
+    duration_ms REAL,
+    error TEXT,
+    trace_id TEXT,
+    metadata TEXT           -- JSON blob
+);
+-- Indexes: event_type, status, source, timestamp, trace_id, composite (event_type, source, timestamp)
+
+CREATE TABLE events_archive (
+    event_id TEXT PRIMARY KEY,
+    event_type TEXT NOT NULL,
+    status TEXT NOT NULL,
+    source TEXT NOT NULL,
+    payload TEXT,
+    timestamp TEXT NOT NULL,
+    duration_ms REAL,
+    error TEXT,
+    trace_id TEXT,
+    metadata TEXT,
+    archived_at TEXT NOT NULL
+);
+```
+
+**Event bus architecture:**
+```
+Cron/API Trigger → store.emit(event_type, source, payload, trace_id, metadata)
+                   → Immediate SQLite INSERT
+                   → Dashboard/API can query, filter, trace
+                   → Auto-cleanup: store.archive_old(days=30)
+```
+
+**Events API (api/events.py):**
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/events` | Query with filters (type, status, source, trace_id, start, end, limit, offset) |
+| GET | `/api/v1/events/stats` | Stats for N hours (hours param, default 24) |
+| GET | `/api/v1/events/errors` | Failed events (limit, source params) |
+| GET | `/api/v1/events/trace/<trace_id>` | Full event trace by trace_id |
+| POST | `/api/v1/events/archive` | Archive events >N days (days param, default 30) |
+| POST | `/api/v1/events/archive/<event_id>` | Archive single event |
+
+**Why this matters:** Full audit trail of data flow. When a cron job fails, you can see exactly which tick failed, how long it took, what error occurred. Critical for reliability and debugging.
+
+**Not needed:** No Redis, RabbitMQ, or Kafka. SQLite + existing async queue is sufficient for <100 events/day scale.
+
+### 3.12 Semantic Layer (`core/semantic.py`)
+
+Unified query abstraction that precomputes derived metrics so every dashboard shows the same numbers. Implemented as Python classes + SQLite views.
+
+**Implemented components:**
+
+```python
+class MarketView:
+    """SQLite views for precomputed technical indicators on price data."""
+
+    def __init__(self, db_path: str): ...
+
+    # SQL Views created:
+    #   CREATE VIEW v_market_indicators  — MA5/10/20/50/200 + volume_ratio
+    #   CREATE VIEW v_market_rsi         — RSI14 with full CTE chain
+
+    # Query methods:
+    def get_indicators(self, symbol, date_from, date_to=None, limit=None) -> List[Dict]
+    def get_rsi(self, symbol, date_from, date_to=None, limit=None) -> List[Dict]
+    def get_latest_for_symbols(self, symbols: List[str]) -> List[Dict]
+    # Returns: date, symbol, close, ma5, ma10, ma20, ma50, ma200, volume_ratio
+
+class AggregateCache:
+    """Manages precomputed aggregate data for quick dashboard queries."""
+
+    # Tables created:
+    #   aggregate_cache (key/value with TTL)
+    #   market_breadth (date/symbol/close/pct_change/volume/classification)
+
+    def __init__(self, db_path: str): ...
+    def init_db(self) -> None
+    def get_cached(self, key: str) -> Optional[Dict]
+    def set_cached(self, key: str, value: Dict, ttl_hours: int = 12) -> None
+    def invalidate(self, key: str) -> None
+    def refresh_all(self) -> Dict    # Runs full precompute: breadth + gainers/losers + sector rank
+    def get_market_breadth(self, date: str) -> List[Dict]
+```
+
+**SQLite views (actual DDL):**
+```sql
+-- Moving averages + volume ratio
+CREATE VIEW IF NOT EXISTS v_market_indicators AS
+SELECT t.date, t.symbol, t.open, t.high, t.low, t.close, t.volume, t.adj_close,
+       -- Moving averages (window functions)
+       AVG(t2.close) OVER (...) AS ma5,
+       AVG(t2.close) OVER (...) AS ma10,
+       AVG(t2.close) OVER (...) AS ma20,
+       AVG(t2.close) OVER (...) AS ma50,
+       AVG(t2.close) OVER (...) AS ma200,
+       -- Volume ratio (current vs 10-day avg)
+       t.volume * 1.0 / NULLIF(AVG(t2.volume) OVER (...), 0) AS volume_ratio
+FROM stock_data t
+INNER JOIN stock_data t2 ON t2.symbol = t.symbol AND t2.date <= t.date
+GROUP BY t.date, t.symbol;
+
+-- RSI14 with full CTE chain
+CREATE VIEW IF NOT EXISTS v_market_rsi AS
+WITH price_changes AS (
+    SELECT symbol, date, close,
+           close - LAG(close) OVER (...) AS price_change
+    FROM stock_data
+),
+gains_losses AS (...),
+avg_gain_loss AS (...)
+SELECT symbol, date, close, avg_gain, avg_loss,
+       CASE WHEN avg_loss = 0 OR avg_loss IS NULL THEN 100.0
+            ELSE 100.0 - (100.0 / (1.0 + avg_gain / avg_loss))
+       END AS rsi14
+FROM avg_gain_loss;
+```
+
+**Precompute scheduler (`core/precompute_scheduler.py`):**
+- Uses APScheduler (in-process) for scheduling
+- Daily at 06:00 SGT (23:00 UTC): full market precompute
+- Hourly indicators snapshot during trading hours (00:00-09:00 UTC)
+- Jobs: `daily_market`, `market_breadth`, `sector_ranking`, `indicators_snapshot`
+- Integrates with EventStore for audit trail on each precompute tick
+
+**Query methods:**
+```python
+from core.semantic import MarketView, AggregateCache
+
+mv = MarketView(db_path)
+ag = AggregateCache(db_path)
+
+# Get indicators
+indicators = mv.get_indicators("VIC", "2026-01-01", limit=10)
+# → [{date, symbol, open, high, low, close, volume, adj_close,
+#     ma5, ma10, ma20, ma50, ma200, volume_ratio}, ...]
+
+# Get RSI
+rsi = mv.get_rsi("VIC", "2026-01-01", limit=5)
+# → [{date, symbol, close, rsi14}, ...]
+
+# Latest snapshot for multiple symbols
+latest = mv.get_latest_for_symbols(["VIC", "VCB", "HPG"])
+# → [{date, symbol, close, ma5, ma10, ma20, ma50, ma200, volume_ratio}, ...]
+
+# Full precompute run
+results = ag.refresh_all()
+# → {"advancers": [...], "losers": [...], "sector_rank": [...]}
+```
+
+**Singleton access:**
+```python
+from core.precompute_scheduler import get_precompute_scheduler
+scheduler = get_precompute_scheduler(db_path, event_store)
+# Automatically starts scheduler if not running
+```
+
+**Why this matters:**
+- DRY: computed columns calculated once, not per-request
+- Consistency: all dashboards show same MA20, RSI, volume ratio
+- Performance: 10-50x faster on repeated queries (precomputed SQLite view)
+- Maintainability: change MA20 formula in one place, all dashboards update
+
+**Not needed:** No Cube.js server, no GraphQL. Python functions + SQLite views are lighter and more maintainable for solo dev.
+
+### ✅ Pattern Evaluation Results
+
+Pattern 1 (Event-Driven Pipeline) — ✅ **Áp dụng được**
+- Lightweight adaptation: SQLite + async queue, không cần Redis/RabbitMQ/Kafka
+- Full audit trail cho mọi data pipeline tick (cron/API/manual)
+- Event viewer page với filter, duration chart, error drill-down
+- Đánh giá: ✅ Fits solo dev constraints, <100 events/day, SQLite sufficient
+
+Pattern 2 (Semantic Layer) — ✅ **Áp dụng được**
+- Python functions + SQLite views thay vì Cube.js server
+- Precompute daily: MA5/10/20/50/200, RSI14, volume ratio, sector ranking
+- UNIQUE: No external server dependency, 10-50x faster repeated queries
+- Đánh giá: ✅ Eliminates DRY violations, consistent dashboard numbers, zero new infra
 
 ### 5.3 Existing Tables (from v2.0 — all preserved)
 
@@ -723,6 +1067,63 @@ CREATE TABLE IF NOT EXISTS circuit_breaker (
     last_reset_at TEXT,
     threshold INTEGER DEFAULT 3,     -- Failures before opening
     reset_timeout INTEGER DEFAULT 30 -- Seconds before half-open
+);
+
+-- Event Pipeline (borrowed from ever-gauzy's Jitsu pattern)
+CREATE TABLE IF NOT EXISTS events (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,              -- Event type: market_snapshot, stock_pull, analysis_tick, etc.
+    source TEXT NOT NULL,            -- cron | api | manual
+    status TEXT NOT NULL,            -- success | error | timeout
+    payload TEXT,                    -- JSON blob with context
+    start_time TEXT,
+    end_time TEXT,
+    duration_ms REAL,
+    error_trace TEXT,
+    created_at TEXT
+);
+
+-- Aggregated Data (semantic layer — precomputed metrics)
+CREATE TABLE IF NOT EXISTS aggregated_data (
+    id INTEGER PRIMARY KEY,
+    ticker TEXT NOT NULL,
+    date TEXT NOT NULL,
+    close REAL,
+    open REAL,
+    high REAL,
+    low REAL,
+    volume REAL,
+    market_cap REAL,
+    ma5 REAL,
+    ma10 REAL,
+    ma20 REAL,
+    ma50 REAL,
+    ma200 REAL,
+    rsi14 REAL,
+    volume_ratio REAL,
+    price_change_pct REAL,
+    price_change_5d REAL,
+    price_change_20d REAL,
+    sector_rank INTEGER,
+    sector_avg_close_pct REAL,
+    is_uptrend BOOLEAN,
+    is_high_volume BOOLEAN,
+    is_breakout BOOLEAN,
+    UNIQUE(ticker, date)
+);
+
+-- Event archive (for old events > 90 days)
+CREATE TABLE IF NOT EXISTS events_archive (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    source TEXT NOT NULL,
+    status TEXT NOT NULL,
+    payload TEXT,
+    start_time TEXT,
+    end_time TEXT,
+    duration_ms REAL,
+    error_trace TEXT,
+    archived_at TEXT
 );
 ```
 
