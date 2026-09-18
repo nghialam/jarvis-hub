@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  jarvis-hub:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: jarvis-hub
+    restart: unless-stopped
+    ports:
+      - "8100:8100"
+    environment:
+      - JARVIS_ENV=prod
+      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY:-change-me-in-production}
+      - JARVIS_DB_PATH=/app/data/jarvis.db
+      - OLLAMA_URL=http://ollama:11434
+      - LLM_PROVIDER=ollama
+    volumes:
+      - jarvis-data:/app/data
+      - jarvis-logs:/app/logs
+      - jarvis-knowledge:/app/knowledge
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8100/api/v1/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - jarvis-net
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - jarvis-net
+
+volumes:
+  jarvis-data:
+  jarvis-logs:
+  jarvis-knowledge:
+  ollama-data:
+
+networks:
+  jarvis-net:
+    driver: bridge

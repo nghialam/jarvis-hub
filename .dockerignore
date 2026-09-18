@@ -1,0 +1,17 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+.git/
+.bak/
+.env
+.env.local
+knowledge/jarvis.db
+data/*.db
+*.log
+*.tmp
+.DS_Store
+.idea/
+.vscode/

@@ -137,9 +137,9 @@ def add_transaction():
         total = quantity * price
         
         ctx.db._c().execute(
-            """INSERT INTO portfolio_transactions (symbol, action, quantity, price, total, status)
+            """INSERT INTO portfolio_transactions (symbol, action, quantity, price, txn_date, note)
                VALUES (?, ?, ?, ?, ?, ?)""",
-            (symbol, action, quantity, price, total, "completed")
+            (symbol, action, quantity, price, datetime.utcnow().strftime("%Y-%m-%d"), f"total={total}")
         )
         ctx.db._conn.commit()
         

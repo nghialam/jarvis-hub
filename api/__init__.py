@@ -29,7 +29,7 @@ def register_blueprints(app):
     from api.events import bp as events_bp
 
     # Register blueprints with correct url_prefixes
-    app.register_blueprint(main_bp, url_prefix="/")
+    app.register_blueprint(main_bp, url_prefix="/api/v1")
     app.register_blueprint(news_bp, url_prefix="/api/v1/news")
     app.register_blueprint(stocks_bp, url_prefix="/api/v1/stocks")
     app.register_blueprint(screener_bp, url_prefix="/api/v1/screener")
@@ -51,7 +51,18 @@ def register_blueprints(app):
     # Register proxy routes for legacy /api/* paths
     _register_legacy_proxies(app, existing_routes)
 
-    app.logger.info("Registered %d blueprints + proxy routes", 9)
+    # Build and return registration report
+    registered = []
+    failed = []
+    for name, bp in app.blueprints.items():
+        if name.startswith('_'):
+            continue
+        registered.append(name)
+        app.logger.info("Registered blueprint: %s (%d rules)", name, len(bp.view_functions))
+
+    app.logger.info("Registered %d blueprints + proxy routes", len(registered))
+
+    return {"registered": registered, "failed": failed}
 
 
 def _register_legacy_proxies(app, skip_existing):

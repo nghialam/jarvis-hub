@@ -80,10 +80,12 @@ def create_article():
             if not slug:
                 slug = title.lower().replace(" ", "-")[:100]
             
+            slug_auto = slug or title.lower().replace(" ", "-")[:100]
+            now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
             cursor = ctx.db._c().execute(
-                """INSERT INTO cms_articles (title, content, slug, status, author)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (title, content, slug, "published", "admin")
+                """INSERT INTO cms_articles (slug, title, content, category, status, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (slug_auto, title, content, "general", "published", now, now)
             )
             ctx.db._conn.commit()
             return jsonify({
