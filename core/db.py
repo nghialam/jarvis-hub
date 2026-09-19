@@ -665,7 +665,7 @@ class Database:
 
     def get_watchlist(self):
         return [dict(r) for r in self._c().execute(
-              "SELECT * FROM watchlist ORDER BY updated_at DESC").fetchall()]
+              "SELECT * FROM watchlist ORDER BY id DESC").fetchall()]
 
     def remove_watchlist(self, symbol):
         with self._db_lock:

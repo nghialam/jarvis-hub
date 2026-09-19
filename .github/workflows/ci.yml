@@ -1,0 +1,63 @@
+name: JH3.0 CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Lint (flake8)
+        run: |
+          pip install flake8 flake8-docstrings
+          flake8 --exclude=migrations/,scripts/,venv,.hermes --count tests/ core/ api/
+        continue-on-error: true
+
+      - name: Format (black check)
+        run: |
+          pip install black
+          black --check --diff --line-length 100 . --exclude migrations/ --exclude scripts/
+
+      - name: Sort imports (isort check)
+        run: |
+          pip install isort
+          isort --check-only --profile black --skip migrations --skip scripts .
+
+      - name: Security (bandit)
+        run: |
+          pip install bandit
+          bandit -r core/ api/ -ll --skip B101,B311
+        continue-on-error: true
+
+      - name: Test with pytest
+        run: |
+          pip install pytest pytest-cov feedparser bleach markdown
+          pytest tests/ -v --tb=short --cov=core --cov=api --cov-report=term-missing --junitxml=test-results.xml
+        env:
+          APP_ENV: test
+          SECRET_KEY: test-key-12345
+          DATABASE_URI: sqlite:///tmp/test-jh30.db
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results.xml
