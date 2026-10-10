@@ -158,19 +158,17 @@ class TestAnalyst(unittest.TestCase):
         )
         self.assertEqual(result["sentiment"], "Neutral")
 
-    def test_analyze_articles_returns_list(self):
+    @patch("core.ollama_client.ollama_parse_json",
+           return_value={"summary": "Mocked summary", "sentiment": "Neutral"})
+    def test_analyze_articles_returns_list(self, mock_parse):
         """Should return a list of analyzed articles."""
         articles = [
             {"title": "Test", "content": "Bullish market trends observed"},
         ]
-        try:
-            results = self.analyst.analyze_articles(articles)
-            self.assertIsInstance(results, list)
-            if results:
-                self.assertIn("sentiment", results[0])
-        except Exception:
-            # If LLM is unavailable, heuristic fallback should still work
-            pass
+        results = self.analyst.analyze_articles(articles)
+        self.assertIsInstance(results, list)
+        if results:
+            self.assertIn("sentiment", results[0])
 
 
 class TestSynthesizer(unittest.TestCase):
@@ -180,18 +178,16 @@ class TestSynthesizer(unittest.TestCase):
         from core.market_intelligence import synthesizer
         self.synthesizer = synthesizer
 
-    def test_synthesize_returns_string(self):
-        """Should return a string brief (may use fallback if LLM unavailable)."""
+    @patch("core.ollama_client.ollama_call",
+           return_value="Synthesized brief content")
+    def test_synthesize_returns_string(self, mock_call):
+        """Should return a string brief."""
         articles = [
             {"title": "Test", "summary": "Market up", "sentiment": "BULLISH"},
         ]
-        try:
-            brief = self.synthesizer.synthesize_market_brief(articles)
-            self.assertIsInstance(brief, str)
-            self.assertGreater(len(brief), 0)
-        except Exception as e:
-            # If LLM fails, fallback should generate a brief
-            self.assertTrue(True)
+        brief = self.synthesizer.synthesize_market_brief(articles)
+        self.assertIsInstance(brief, str)
+        self.assertGreater(len(brief), 0)
 
     def test_fallback_brief_generated(self):
         """Fallback brief should be generated if LLM unavailable."""

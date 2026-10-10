@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Market Briefs — Jarvis Hub 2.0</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/subpages.css">
+</head>
+
+<body>
+    <div class="header">
+        <h1>⚡ Jarvis Hub 2.0</h1>
+        <div class="header-meta">
+            <button class="theme-toggle-btn" id="theme-toggle" onclick="toggleTheme()"
+                title="Toggle dark/light mode">🌙</button>
+            <div class="freshness">
+                <span class="freshness-dot" id="freshness-dot"></span>
+                <span id="freshness-text">Loading...</span>
+            </div>
+        </div>
+    </div>
+
+    {% include 'partials/breadcrumb.html' %}
+
+    <div class="page-header">
+        <h2>📊 Market Briefs</h2>
+        <div class="page-actions">
+            <button class="btn btn-secondary" id="refresh-briefs-btn" onclick="loadMarketBriefs()">🔄 Refresh</button>
+            <button class="btn btn-secondary" id="toggle-view-btn" onclick="toggleView()">📋 Table View</button>
+            <span id="briefs-count" class="stats-badge">Loading...</span>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="card-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 20px;">
+        <div class="stat-card">
+            <div class="stat-value" id="total-briefs">-</div>
+            <div class="stat-label">Total Briefs</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="latest-date">-</div>
+            <div class="stat-label">Latest Date</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="latest-source">-</div>
+            <div class="stat-label">Latest Source</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="date-range">-</div>
+            <div class="stat-label">Date Range</div>
+        </div>
+    </div>
+
+    <div class="subpage-content">
+        <!-- Search & Filter Bar -->
+        <div class="filter-bar" id="brief-filters">
+            <input type="text" id="search-input" placeholder="Search content..." oninput="debounceSearch()"
+                style="max-width: 300px;">
+            <input type="date" id="date-from" onchange="loadBriefsPaginated()"
+                title="From date">
+            <input type="date" id="date-to" onchange="loadBriefsPaginated()"
+                title="To date">
+            <select id="source-filter" onchange="loadBriefsPaginated()">
+                <option value="">All Sources</option>
+                <option value="cron">Cron</option>
+                <option value="manual">Manual</option>
+            </select>
+        </div>
+
+        <div id="briefs-loading" class="loading" style="display:none">Loading market briefs...</div>
+        <div id="briefs-error" class="error-message" style="display:none"></div>
+
+        <!-- Content Views -->
+        <!-- Card View -->
+        <div id="briefs-card-view">
+            <div class="empty-state">Loading market briefs...</div>
+        </div>
+
+        <!-- Table View -->
+        <div id="briefs-table-view" style="display:none;">
+            <table class="data-table" id="briefs-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Source</th>
+                        <th>Preview</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="briefs-table-body">
+                    <tr><td colspan="5" class="empty-state">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        <div id="briefs-pagination" class="pagination" style="display:none;">
+            <button id="prev-page" class="btn btn-sm" onclick="changePage(-1)">← Prev</button>
+            <span id="page-info" style="margin: 0 10px;">Page 1 of 1</span>
+            <button id="next-page" class="btn btn-sm" onclick="changePage(1)">Next →</button>
+        </div>
+    </div>
+
+    <!-- Detail Modal -->
+    <div id="brief-modal" class="modal-overlay" style="display:none;" onclick="closeModal(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 id="modal-title">Market Brief Detail</h3>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-body">
+                <div class="loading">Loading...</div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="copyBrief()">📋 Copy</button>
+                <button class="btn btn-primary" onclick="closeModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script src="/static/js/subpages.js"></script>
+    <script src="/static/js/market-briefs.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            loadBriefsSummary();
+            loadMarketBriefs();
+            checkHealth();
+        });
+    </script>
+</body>
+
+</html>

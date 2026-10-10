@@ -58,3 +58,5 @@ kanban/
 # DB files (small, but may contain sensitive market data)
 *.db
 *.sqlite
+*.db-wal
+*.db-shm
