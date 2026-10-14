@@ -12,13 +12,17 @@ import sys
 import json
 import time
 import datetime
+import signal
 import sqlite3
+import threading
 from pathlib import Path
+from typing import Any, Optional
 
 # ─── Lazy imports ──────────────────────────────────────
 requests = None
 BeautifulSoup = None
 DDGS = None
+
 
 def _ensure_imports():
     global requests, BeautifulSoup, DDGS
@@ -41,7 +45,10 @@ BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "signals.db"
 OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
-LLM_MODEL    = os.environ.get("LLM_MODEL", "qwen3.6:35b-a3b-mxfp8")
+LLM_MODEL = os.environ.get("LLM_MODEL", "qwen3.6:35b-a3b-mxfp8")
+
+# Scheduling: configurable via AUTO_SCAN_INTERVAL env var (default 300s = 5 min)
+CHECK_INTERVAL = int(os.environ.get("AUTO_SCAN_INTERVAL", "300"))
 
 
 # ─── 1. Data Collection ────────────────────────────────
@@ -73,8 +80,8 @@ def collect_markets():
         cells = row.select("td")
         if len(cells) >= 4:
             symbol = cells[0].get_text(strip=True).split("\n")[0]
-            price  = cells[2].get_text(strip=True)
-            chg    = cells[3].get_text(strip=True)
+            price = cells[2].get_text(strip=True)
+            chg = cells[3].get_text(strip=True)
             marks[symbol[:15]] = {"price": price, "change": chg}
     return marks
 
@@ -102,10 +109,10 @@ def collect_ddgs_news():
         return []
 
     topics = [
-         "AI breakthrough new model launch",
-         "artificial intelligence regulation policy",
-         "AI startup funding valuation",
-     ]
+        "AI breakthrough new model launch",
+        "artificial intelligence regulation policy",
+        "AI startup funding valuation",
+    ]
     results = []
     seen = set()
 
@@ -118,12 +125,12 @@ def collect_ddgs_news():
                     if title and title.lower() not in seen:
                         seen.add(title.lower())
                         results.append({
-                             "title":  title,
-                             "source": a.get("href", "").split("//")[1].split("/")[0] if a.get("href") else "",
-                             "date":   "",
-                             "url":    a.get("href", ""),
-                             "body":   a.get("body", "")[:300],
-                         })
+                            "title": title,
+                            "source": a.get("href", "").split("//")[1].split("/")[0] if a.get("href") else "",
+                            "date": "",
+                            "url": a.get("href", ""),
+                            "body": a.get("body", "")[:300],
+                        })
         except Exception as e:
             print(f"   [WARN] DDG error '{topic}': {e}", file=sys.stderr)
 
@@ -135,16 +142,16 @@ def collect_all():
     markets = collect_markets()
 
     print("[2/3] Yahoo Finance headlines...")
-    yahoo_hl  = collect_yahoo_headlines()
+    yahoo_hl = collect_yahoo_headlines()
 
     print("[3/3] DuckDuckGo AI news... ")
     ddgs_news = collect_ddgs_news()
 
     return {
         "collected_at": datetime.datetime.now().isoformat(),
-        "markets":      markets,
+        "markets": markets,
         "yahoo_headlines": yahoo_hl,
-        "ddgs_news":    ddgs_news,
+        "ddgs_news": ddgs_news,
     }
 
 
@@ -156,7 +163,7 @@ def _call_llm(prompt, max_tokens=1024):
     try:
         resp = requests.post(
             f"{OLLAMA_URL}/v1/chat/completions",
-            json={"model": LLM_MODEL, "messages": [{"role":"user","content":prompt}], "stream": False, "max_tokens": max_tokens},
+            json={"model": LLM_MODEL, "messages": [{"role": "user", "content": prompt}], "stream": False, "max_tokens": max_tokens},
             timeout=180,
         )
         resp.raise_for_status()
@@ -173,7 +180,7 @@ def chain_1_synthesis(data):
     hpairs = "\n".join(f"- {k}: {v['price']} ({v['change']})" for k, v in list(markets.items())[:12])
     headlines = "\n" + "\n".join(f"- {h}" for h in data.get("yahoo_headlines", [])[:10])
     ddgs_news = "\n\n".join(
-        f"- **{nd['title']}** ({nd.get('source','')})\n  Body: {nd.get('body','')}"
+        f"- **{nd['title']}** ({nd.get('source', '')})\n  Body: {nd.get('body', '')}"
         for nd in data.get("ddgs_news", [])[:8]
     )
 
@@ -331,13 +338,14 @@ def notify_telegram(s1, s2, s3):
 
 # ─── 5. Execution Pipeline ────────────────────────
 
-def run_pipeline(verbose=True):
+def run_pipeline(verbose=True, scan_id: Optional[str] = None):
     """Execute full pipeline: scrape → LLM chains → storage → notify."""
     start = time.time()
+    tag = f" [{scan_id}]" if scan_id else ""
 
     if verbose:
-        print("\n" + "=" * 60)
-        print("JARVIS AI INTELLIGENCE BRIEFING SYSTEM")
+        print(f"\n{'=' * 60}")
+        print(f"JARVIS AI INTELLIGENCE BRIEFING SYSTEM{tag}")
         print(f"Start: {datetime.datetime.now().isoformat()}")
 
     # Phase 1: Collect data
@@ -349,37 +357,155 @@ def run_pipeline(verbose=True):
 
     # Phase 2: LLM chains (sequential - CRITICAL for qwen3.6)
     if verbose:
-        print("\n[Chain 1/3] News synthesis...")
+        print(f"\n[Chain 1/3] News synthesis...")
     s1 = chain_1_synthesis(data)
 
-    print("[Chain 2/3] Recommendations...")
-    time.sleep(10)
+    print(f"[Chain 2/3] Recommendations{tag}...")
+    # Small gap between LLM calls to avoid hammering the local Ollama instance
+    time.sleep(5)
     s2 = chain_2_recommendations(data)
 
-    print("[Chain 3/3] Tech Lab proposal...")
-    time.sleep(10)
+    print(f"[Chain 3/3] Tech Lab proposal{tag}...")
+    time.sleep(5)
     s3 = chain_3_tech_lab(data)
 
     # Add section 4 as empty since chain naming was 1-2-3 but we want 4 sections total
     s4 = "Tech Lab data embedded in Chain 3 above." if verbose else ""
 
     # Phase 3: Store
-    print("\n[Phase 3] Saving briefing to DB...")
+    print(f"\n[Phase 3] Saving briefing to DB...{tag}")
     save_briefing(data, s1, s2, s3, s4)
 
     # Phase 4: Telegram delivery
-    print("[Phase 4] Sending to Telegram...")
+    print(f"[Phase 4] Sending to Telegram{tag}...")
     notify_telegram(s1, s2, s3)
 
     elapsed = round(time.time() - start, 1)
-    print(f"\nBRIEFING COMPLETE in {elapsed}s\n")
+    print(f"\nBRIEFING COMPLETE in {elapsed}s{tag}\n")
+    return data, s1, s2, s3, s4
+
+
+# ─── SignalMonitor: Event-driven scheduling ──────────────
+
+try:
+    from apscheduler.schedulers.threading import ThreadPoolScheduler  # type: ignore[import-untyped]
+    _USE_APSCHEDULER = True
+except ImportError:
+    _USE_APSCHEDULER = False
+    ThreadPoolScheduler = None  # type: ignore[misc,assignment]
+
+
+class SignalMonitor:
+    """
+    Periodic signal scanner using event-driven scheduling.
+
+    Uses APScheduler if available, otherwise falls back to threading.Timer.
+    Interval is configurable via AUTO_SCAN_INTERVAL env var (default 300s / 5 min).
+    Handles SIGTERM for graceful shutdown.
+    """
+
+    check_interval = CHECK_INTERVAL  # class-level default, overridable per instance
+
+    def __init__(self):
+        self._running = False
+        self._scheduler: Optional[threading.Timer] = None
+        self._apscheduler: Any = None
+        self._scan_count = 0
+
+        if _USE_APSCHEDULER and ThreadPoolScheduler is not None:  # type: ignore[redundant-expr]
+            self._apscheduler = ThreadPoolScheduler()
+        else:
+            # threading.Timer fallback — not blocking, re-schedules itself
+            pass
+
+    def start(self):
+        """Start periodic scanning. Uses APScheduler or threading.Timer."""
+        if self._running:
+            return
+        self._running = True
+
+        interval = self.check_interval
+
+        if _USE_APSCHEDULER:
+            self._apscheduler.add_job(
+                self._run_scan,
+                'interval',
+                seconds=interval,
+                id='signal_scan',
+                max_instances=1,  # prevent overlapping runs
+            )
+            self._apscheduler.start()
+            print(f"[SignalMonitor] APScheduler started (scan every {interval}s)")
+        else:
+            # Fallback: start first run immediately, then re-schedule via Timer
+            self._schedule_next_timer()
+            print(f"[SignalMonitor] Timer fallback started (scan every {interval}s)")
+
+        # Register SIGTERM handler for graceful shutdown
+        signal.signal(signal.SIGTERM, self._handle_sigterm)
+        signal.signal(signal.SIGINT, self._handle_sigterm)
+
+    def stop(self):
+        """Stop scanning and shut down gracefully."""
+        self._running = False
+
+        if _USE_APSCHEDULER and self._apscheduler:
+            self._apscheduler.shutdown(wait=False)
+            print("[SignalMonitor] APScheduler shut down")
+        else:
+            # Cancel pending timer
+            if self._scheduler:
+                self._scheduler.cancel()
+                self._scheduler = None
+            print("[SignalMonitor] Timer scheduler stopped")
+
+    def _handle_sigterm(self, signum, frame):
+        """Handle SIGTERM/SIGINT: log and trigger graceful shutdown."""
+        sig_name = signal.Signals(signum).name if hasattr(signal, 'Signals') else str(signum)
+        print(f"\n[SignalMonitor] Received {sig_name} — shutting down gracefully...")
+        self.stop()
+
+    def _schedule_next_timer(self):
+        """Reschedule next scan via threading.Timer (fallback mode)."""
+        if not self._running:
+            return
+        self._scheduler = threading.Timer(
+            self.check_interval,
+            self._run_scan
+        )
+        self._scheduler.daemon = True
+        self._scheduler.start()
+
+    def _run_scan(self):
+        """Execute one scan cycle."""
+        if not self._running:
+            return
+
+        self._scan_count += 1
+        scan_id = f"#{self._scan_count}"
+
+        try:
+            run_pipeline(verbose=True, scan_id=scan_id)
+        except Exception as e:
+            print(f"[SignalMonitor] Scan {scan_id} failed: {e}", file=sys.stderr)
+        finally:
+            if self._running:
+                self._schedule_next_timer()
+
+    def get_stats(self):
+        return {
+            "scan_count": self._scan_count,
+            "running": self._running,
+            "check_interval": self.check_interval,
+            "using_apscheduler": _USE_APSCHEDULER,
+        }
 
 
 # ─── Flask Dashboard ──────────────────────────────
 
 def create_flask_app():
     from flask import Flask, render_template_string, jsonify
-    
+
     TEMPLATES = """
 <html><head>
 <title>Jarvis AI Signal Monitor</title>
@@ -413,9 +539,9 @@ setInterval(refreshData, 30000); // Auto-refresh every 30s
 {% for b in briefings %}
 <div class="section">
   <h2>Briefing #{{ loop.revindex }} - {{ b.timestamp }}</h2>
-  <div>{{ b.section_1 | replace('\n', '<br>') | safe }}</div>
+  <div>{{ b.section_1 | replace('\\n', '<br>') | safe }}</div>
   <hr style="margin:1rem 0;opacity:.2">
-  <div>{{ b.section_2 | replace('\n', '<br>') | safe }}</div>
+  <div>{{ b.section_2 | replace('\\n', '<br>') | safe }}</div>
 </div>
 {% endfor %}
 
@@ -460,11 +586,12 @@ setInterval(refreshData, 30000); // Auto-refresh every 30s
 
 if __name__ == "__main__":
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="Jarvis AI Signal Monitor")
     sub = parser.add_subparsers(dest="command")
     sub.add_parser("brief", help="Run one briefing pipeline (text output)")
     sub.add_parser("dashboard", help="Start Flask web dashboard (port 8501)")
+    sub.add_parser("scan", help="Start continuous signal monitor")
 
     args = parser.parse_args()
 
@@ -476,3 +603,13 @@ if __name__ == "__main__":
         app = create_flask_app()
         print("Starting Jarvis AI Signal Dashboard on http://localhost:8501")
         app.run(host="0.0.0.0", port=8501, debug=False)
+
+    elif args.command == "scan":
+        monitor = SignalMonitor()
+        monitor.start()
+        try:
+            while True:
+                time.sleep(1)  # main thread stays alive; monitor runs in scheduler threads
+        except KeyboardInterrupt:
+            monitor.stop()
+            print("Signal monitor stopped.")

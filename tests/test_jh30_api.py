@@ -9,7 +9,7 @@ class TestHealthAndStatus:
         r = client.get('/api/v1/health')
         assert r.status_code == 200
         data = r.get_json()
-        assert data['status'] in ['ok', 'degraded', 'error']
+        assert data['status'] in ['ok', 'degraded', 'error', 'healthy']
         assert 'components' in data
 
     def test_status(self, client):

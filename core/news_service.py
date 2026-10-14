@@ -162,8 +162,43 @@ def _get_db():
 _SYS = __import__("sys")
 
 
+def _fetch_single_feed(source: dict) -> List[dict]:
+    """Fetch and parse a single RSS feed, returning extracted articles."""
+    try:
+        feed = feedparser.parse(source["url"])
+        if feed.bozo and not feed.entries:
+            return []
+        articles = []
+        for entry in feed.entries[:5]:
+            link = entry.get("link", "") or entry.get("id", "")
+            if not link:
+                continue
+            title = entry.get("title", "").strip()
+            summary = entry.get("summary", "").strip()
+            pub_parsed = entry.get("published_parsed")
+            is_recent = False
+            if pub_parsed:
+                pub_dt = datetime(*pub_parsed[:6])
+                hours_old = (datetime.now() - pub_dt).total_seconds() / 3600
+                is_recent = hours_old <= 48
+            articles.append({
+                "title": title,
+                "link": link,
+                "summary_raw": summary.replace("<[^>]+>", ""),
+                "published": entry.get("published", entry.get("updated", "")),
+                "source": source["name"],
+                "category": source.get("category", "general"),
+                "priority": source.get("priority", 2),
+                "is_recent": is_recent,
+            })
+        return articles
+    except Exception as e:
+        print("[WARN] RSS fetch failed for %s: %s" % (source["name"], e), file=sys.stderr)
+        return []
+
+
 def fetch_and_categorize_articles(limit: int = 30) -> List[dict]:
-    """Fetch RSS feeds from all sources, deduplicate, and return articles."""
+    """Fetch RSS feeds from all sources in parallel, deduplicate, and return articles."""
     config = _get_config() or {}
     sources = config.get("feed", {}).get("sources", [
         {"name": "Cafef Doanh nghiệp", "url": "https://cafef.vn/doanh-nghiep.rss", "priority": 1},
@@ -174,39 +209,19 @@ def fetch_and_categorize_articles(limit: int = 30) -> List[dict]:
     articles = []
     seen_links = set()
 
-    for source in sources:
-        try:
-            feed = feedparser.parse(source["url"])
-            if feed.bozo and not feed.entries:
-                continue
-            for entry in feed.entries[:5]:
-                link = entry.get("link", "") or entry.get("id", "")
-                if not link or link in seen_links:
-                    continue
-
-                title = entry.get("title", "").strip()
-                summary = entry.get("summary", "").strip()
-
-                pub_parsed = entry.get("published_parsed")
-                is_recent = False
-                if pub_parsed:
-                    pub_dt = datetime(*pub_parsed[:6])
-                    hours_old = (datetime.now() - pub_dt).total_seconds() / 3600
-                    is_recent = hours_old <= 48
-
-                articles.append({
-                    "title": title,
-                    "link": link,
-                    "summary_raw": summary.replace("<[^>]+>", ""),
-                    "published": entry.get("published", entry.get("updated", "")),
-                    "source": source["name"],
-                    "category": source.get("category", "general"),
-                    "priority": source.get("priority", 2),
-                    "is_recent": is_recent,
-                })
-                seen_links.add(link)
-        except Exception as e:
-            print("[WARN] RSS fetch failed for %s: %s" % (source["name"], e), file=sys.stderr)
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        future_map = {executor.submit(_fetch_single_feed, src): src for src in sources}
+        for future in as_completed(future_map):
+            source = future_map[future]
+            try:
+                feed_articles = future.result(timeout=5)
+                for art in feed_articles:
+                    link = art["link"]
+                    if link not in seen_links:
+                        seen_links.add(link)
+                        articles.append(art)
+            except Exception as e:
+                print("[WARN] Feed task failed for %s: %s" % (source["name"], e), file=sys.stderr)
 
     articles.sort(key=lambda a: (a.get("priority", 2), not a["is_recent"]))
     return articles[:limit]
@@ -856,34 +871,47 @@ def _perform_ai_feed_collection(limit=40) -> Optional[dict]:
         return {"status": "error", "error": str(exc), "tasks": [], "total_articles": 0, "total_sources": 0}
 
 
-def get_fast_feed(limit=30):
-    """Quick feed without LLM — just RSS aggregation for fast access."""
-    import json as _json_module
-    
-    articles = []
-    for source in _AIF_FEED_URLS:
-        try:
-            d = feedparser.parse(source["url"])
-            if d.bozo and not d.entries:
+def _fetch_aif_feed(source: dict) -> List[dict]:
+    """Fetch and parse a single AI feed source, returning extracted articles."""
+    try:
+        d = feedparser.parse(source["url"])
+        if d.bozo and not d.entries:
+            return []
+        results = []
+        for entry in d.entries[:3]:
+            link = (entry.get("link") or entry.get("id") or "").strip()
+            title = (entry.get("title") or "").strip()
+            summary = (entry.get("summary") or entry.get("description") or "").strip()
+            if not link or len(title) < 15:
                 continue
-            for entry in d.entries[:3]:
-                link = (entry.get("link") or entry.get("id") or "").strip()
-                title = (entry.get("title") or "").strip()
-                summary = (entry.get("summary") or entry.get("description") or "").strip()
-                if not link or len(title) < 15:
-                    continue
-                articles.append({
-                    "title": title,
-                    "link": link,
-                    "summary": summary[:200] if summary else "",
-                    "published": entry.get("published", ""),
-                    "source": source["name"],
-                    "section": source.get("section", "General"),
-                })
-        except Exception:
-            pass
+            results.append({
+                "title": title,
+                "link": link,
+                "summary": summary[:200] if summary else "",
+                "published": entry.get("published", ""),
+                "source": source["name"],
+                "section": source.get("section", "General"),
+            })
+        return results
+    except Exception:
+        return []
 
-    # Deduplicate
+
+def get_fast_feed(limit=30):
+    """Quick feed without LLM — RSS aggregation via parallel fetches."""
+    articles = []
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        future_map = {executor.submit(_fetch_aif_feed, src): src for src in _AIF_FEED_URLS}
+        for future in as_completed(future_map):
+            source = future_map[future]
+            try:
+                feed_articles = future.result(timeout=5)
+                articles.extend(feed_articles)
+            except Exception:
+                pass
+
+    # Deduplicate by title
     seen = set()
     unique = []
     for a in articles:
@@ -891,7 +919,7 @@ def get_fast_feed(limit=30):
         if key not in seen and len(key) > 10:
             seen.add(key)
             unique.append(a)
-    
+
     return {"status": "ok", "articles": unique[:limit], "total_articles": len(unique)}
 
 def get_ai_feed(limit=40):

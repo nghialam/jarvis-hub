@@ -9,6 +9,38 @@ from flask import Blueprint, jsonify, request
 news_bp = Blueprint("news", __name__, url_prefix="/api/v1/news")
 
 
+@news_bp.route("", methods=["GET"])
+@news_bp.route("/", methods=["GET"])
+def get_news():
+    """List news articles. Used by dashboard's /api/v1/news call."""
+    try:
+        from core.context import get_context
+
+        ctx = get_context()
+        pages = int(request.args.get("page", "1"))
+        per_page = int(request.args.get("limit", "20"))
+        offset = (pages - 1) * per_page
+
+        articles = []
+        try:
+            rows = ctx.db._c().execute(
+                """SELECT id, title, slug, summary, tags, category, status, created_at, published_at
+                   FROM cms_articles ORDER BY updated_at DESC LIMIT ? OFFSET ?""",
+                (per_page, offset)
+            ).fetchall()
+            articles = [dict(r) for r in rows]
+        except Exception:
+            articles = []
+
+        return jsonify({
+            "status": "ok",
+            "count": len(articles),
+            "articles": articles
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
 @news_bp.route("/score", methods=["POST"])
 def score_articles():
     """Score news articles asynchronously.

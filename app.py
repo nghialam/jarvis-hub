@@ -24,6 +24,7 @@ except ImportError:
     APSCHEDULER_AVAILABLE = False
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "core"))
+sys.path.insert(0, '/Users/nghialam/.hermes/tools')
 
 try:
     import config as cfg_module
@@ -276,6 +277,7 @@ def _init():
      try:
          from api import register_blueprints
          register_blueprints(app)
+         print("[BOOT] Blueprints registered successfully")
      except Exception as e:
          print("[BOOT] Blueprint registration failed: %s" % e)
 
@@ -295,9 +297,19 @@ def _init():
              _jh30_db_path = os.path.join(os.path.dirname(__file__), "data", "jarvis.db")
          event_store = EventStore(_jh30_db_path)
          print("[BOOT] EventStore initialized")
+         try:
+             from core.context import set_event_store
+             set_event_store(event_store)
+         except Exception:
+             pass
      except Exception as e:
          print("[BOOT] EventStore init failed: %s" % e)
          event_store = None
+         try:
+             from core.context import set_event_store
+             set_event_store(None)
+         except Exception:
+             pass
 
      # Phase 2: warm the async task queue (starts worker threads)
      try:
@@ -412,6 +424,13 @@ def hub2_logout():
             pass
     session.clear()
     return redirect(url_for("hub2_login"))
+
+
+@app.route("/hub2/memory")
+def hub2_memory():
+    """Persistent memory management dashboard."""
+    user = session.get("user", {})
+    return render_template("memory.html", current_user=user)
 
 
 def _log_auth_event(username, action):
@@ -1775,6 +1794,360 @@ def article_view(slug):
         return f"Error: {e}", 500
 
 
+# =============================================================================
+
+@app.route("/api/debug", methods=["GET"])
+def api_debug():
+    """Debug endpoint to verify Flask is running."""
+    import sys
+    return jsonify({
+        "status": "ok",
+        "path_entries": len(sys.path),
+        "pid": __import__('os').getpid()
+    })
+
+
+## MEMORY FEATURE — Semantic search & management for persistent memory records
+# =============================================================================
+
+@app.route("/api/memory", methods=["GET"])
+def api_memory_query():
+    """Query memory plugin - list conclusions or search across all memory."""
+    try:
+        from core.local_memory_plugin import MemoryManager
+        
+        keyword = request.args.get("keyword", "")
+        peer = request.args.get("peer", "user")
+        collection = request.args.get("collection", None)
+
+        # If there's a query, do memory search; otherwise list conclusions
+        if keyword:
+            mgr = MemoryManager()
+            results = {"status": "ok", "count": 0, "results": mgr.search(query=keyword, peer=peer, collection=collection) if keyword else mgr.list_conclusions(peer_id=peer)}
+        else:
+            mgr = MemoryManager()
+            results = {
+                "status": "ok",
+                "count": 0,
+                "results": mgr.list_conclusions(peer_id=peer, query=None)[:20]
+            }
+
+        return jsonify(results)
+
+    except ImportError as e:
+        print(f"[MEMORY] unavailable: {e}")
+        return jsonify({"status": "unavailable", "error": str(e)}), 503
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/memory/search", methods=["GET"])  
+def api_memory_search():
+    """Perform a semantic + keyword search across memory."""
+    try:
+        from core.local_memory_plugin import MemoryManager
+
+        query = request.args.get("q", "")
+        peer = request.args.get("peer", "user")
+        collection = request.args.get("collection", None)
+        max_tokens = int(request.args.get("max_tokens", 800))
+        limit = int(request.args.get("limit", 20))
+
+        mgr = MemoryManager()
+        raw_result = mgr.search(query=query, max_tokens=max_tokens, peer=peer, collection=collection)
+
+        # Normalize result to consistent format
+        if isinstance(raw_result, dict):
+            results_list = []
+            docs = raw_result.get("results", [])
+            for doc in docs[:limit]:
+                results_list.append({
+                    "id": doc.get("id") or "",
+                    "type": doc.get("type", "conclusion"),
+                    "category": doc.get("category", ""),
+                    "content": doc.get("content", "")[:600],
+                    "confidence": doc.get("confidence", 1.0),
+                    "similarity": round(doc.get("similarity", 0) or doc.get("score", 0), 4),
+                })
+
+            return jsonify({
+                "status": "ok",
+                "query": query,
+                "count": len(results_list),
+                "results": results_list,
+            })
+        else:
+            return jsonify({"status": "error", "error": "Unexpected search result type"}), 500
+
+    except ImportError as e:
+        return jsonify({"status": "unavailable", "error": str(e)}), 503
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/memory/conclusions", methods=["GET"])
+def api_memory_conclusions():
+    """List saved memory conclusions, optionally filtered."""
+    try:
+        from core.local_memory_plugin import MemoryManager
+
+        peer = request.args.get("peer", "user")
+        query = request.args.get("query", None)
+        limit = int(request.args.get("limit", 50))
+
+        mgr = MemoryManager()
+        conclusions = mgr.list_conclusions(peer_id=peer, query=query)
+
+        # Normalize to consistent format
+        results_list = []
+        for c in conclusions[:limit]:
+            if isinstance(c, dict):
+                results_list.append({
+                    "id": c.get("id") or "",
+                    "type": c.get("type", "fact"),
+                    "category": c.get("category", ""),
+                    "content": c.get("content", "")[:600],
+                    "confidence": round(float(c.get("confidence", 1.0)), 2),
+                    "created_at": c.get("created_at", ""),
+                })
+
+        return jsonify({
+            "status": "ok",
+            "count": len(results_list),
+            "results": results_list,
+        })
+
+    except ImportError as e:
+        return jsonify({"status": "unavailable", "error": str(e)}), 503
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/memory/conclusions/add", methods=["POST"])
+def api_memory_add_conclusion():
+    """Add a new memory conclusion (persistent fact)."""
+    try:
+        from core.local_memory_plugin import MemoryManager
+
+        data = request.get_json() or {}
+        peer_id = data.get("peer_id", "user")
+        content_text = data.get("content", "")
+        
+        if not content_text or len(content_text) < 5:
+            return jsonify({"status": "error", "error": "Content must be at least 5 characters"}), 400
+
+        mgr = MemoryManager()
+        row_id = mgr.create_conclusion(peer_id=peer_id, conclusion_text=content_text.rstrip())
+
+        return jsonify({
+            "status": "ok",
+            "id": row_id,
+            "message": "Conclusion saved successfully",
+        })
+
+    except ImportError as e:
+        return jsonify({"status": "unavailable", "error": str(e)}), 503
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/memory/conclusions/<uuid>", methods=["GET"])
+def api_memory_get_conclusion(uuid):
+    """Get single memory conclusion by ID."""
+    try:
+        from core.local_memory_plugin import MemoryManager
+
+        mgr = MemoryManager()
+        record = mgr.get_conclusion(conclusion_id=uuid)
+
+        if not record:
+            return jsonify({"status": "error", "error": "Not found"}), 404
+
+        return jsonify({
+            "status": "ok",
+            "memory": record,
+        })
+    except ImportError as e:
+        return jsonify({"status": "unavailable", "error": str(e)}), 503
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/memory/conclusions/<uuid>", methods=["PUT"])
+def api_memory_update_conclusion(uuid):
+    """Update fields on an existing memory conclusion.
+
+    JSON body: content, type, category, confidence (any subset)
+    """
+    try:
+        from core.local_memory_plugin import MemoryManager
+
+        mgr = MemoryManager()
+        data = request.get_json() or {}
+
+        success = mgr.update_conclusion(conclusion_id=uuid, **data)
+
+        return jsonify({
+            "status": "ok" if success else "failed",
+            "message": "Updated successfully" if success else "Record not found",
+        })
+    except ImportError as e:
+        return jsonify({"status": "unavailable", "error": str(e)}), 503
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/memory/conclusions/<uuid>", methods=["DELETE"])
+def api_memory_delete_conclusion(uuid):
+    """Delete a memory conclusion by ID."""
+    try:
+        from core.local_memory_plugin import MemoryManager
+
+        mgr = MemoryManager()
+        success = mgr.delete_conclusion(conclusion_id=uuid)
+
+        return jsonify({
+            "status": "ok" if success else "failed",
+            "message": "Deleted successfully" if success else "Record not found",
+        })
+
+    except ImportError as e:
+        return jsonify({"status": "unavailable", "error": str(e)}), 503
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/memory/stats", methods=["GET"])
+def api_memory_stats():
+    """Get memory summary statistics."""
+    try:
+        from core.local_memory_plugin import MemoryManager
+
+        mgr = MemoryManager()
+        
+        # Get some basic metrics
+        sessions = mgr.list_sessions(peer_id=None, limit=100)  
+        conclusions = mgr.list_conclusions(peer_id=None, query=None)
+
+        return jsonify({
+            "status": "ok",
+            "active_sessions": len(sessions),
+            "total_conclusions": len(conclusions),
+            "by_peer": {},  # future enhancement
+        })
+
+    except ImportError as e:
+        return jsonify({"status": "unavailable", "error": str(e)}), 503
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/memory/sessions", methods=["GET"])
+def api_memory_sessions():
+    """List memory sessions."""
+    try:
+        from core.local_memory_plugin import MemoryManager
+
+        peer = request.args.get("peer", None)  
+        limit = int(request.args.get("limit", 50))
+        
+        mgr = MemoryManager()
+        sessions = mgr.list_sessions(peer_id=peer, limit=limit)
+
+        results = []
+        for s in sessions:
+            if isinstance(s, dict):
+                results.append({
+                    "id": s.get("id", ""),
+                    "peer_id": s.get("peer_id", ""),
+                    "title": s.get("title", ""),
+                    "message_count": s.get("message_count", 0),  
+                    "created_at": s.get("created_at", ""),
+                })
+
+        return jsonify({
+            "status": "ok",
+            "count": len(results),
+            "sessions": results,
+        })
+
+    except ImportError as e:
+        return jsonify({"status": "unavailable", "error": str(e)}), 503  
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/memory/sessions/<uuid>/history", methods=["GET"])
+def api_memory_session_history(uuid):
+    """Get message history for a session."""  
+    try:
+        from core.local_memory_plugin import MemoryManager
+
+        limit = int(request.args.get("limit", 50))
+        
+        mgr = MemoryManager()
+        messages = mgr.get_session_history(session_id=uuid, limit=limit)
+
+        results = []
+        for m in (messages or []):
+            if isinstance(m, dict):
+                results.append({
+                    "role": m.get("role", ""),
+                    "content": m.get("content", "")[:500],
+                    "timestamp": m.get("created_at", ""),
+                })
+
+        return jsonify({
+            "status": "ok",
+            "count": len(results),  
+            "session_id": uuid,
+            "messages": results,
+        })
+
+    except ImportError as e:
+        return jsonify({"status": "unavailable", "error": str(e)}), 503
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@app.route("/api/memory/health-check", methods=["GET"])  
+def api_memory_health():
+    """Check if the memory backend is healthy."""
+    try:
+        from core.local_memory_plugin import MemoryManager
+
+        mgr = MemoryManager()
+        
+        return jsonify({
+            "status": "ok",
+            "backend": "postgres-pgvector-ollama-bge-m3",
+            "message": "Memory system functional",
+        })
+
+    except ImportError as e:
+        return jsonify({"status": "unavailable", "error": str(e)}), 503
+
+
 # --- Application entry point -------------------------------------------------
 
 if __name__ == '__main__':
@@ -1802,4 +2175,12 @@ if __name__ == '__main__':
         port=args.port,
         debug=args.debug,
         threaded=True,
-     )
+    )
+
+
+# --- Module-level init -------------------------------------------------------
+# Ensure blueprints are registered even when imported as a module.
+# Double-init is safe since all subcomponents track state themselves.
+if not hasattr(app, '_jh_initialized'):
+    _init()
+

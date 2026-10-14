@@ -24,6 +24,7 @@ class _AppContext:
     """Lightweight holder for app-level shared state."""
     db: Any = None          # core.db.Database instance (or None)
     config: Dict[str, Any] = {}
+    event_store: Any = None  # core.events.EventStore instance (or None)
 
 
 _ctx: Optional[_AppContext] = None
@@ -36,6 +37,14 @@ def init_context(db, config: Dict[str, Any]) -> None:
         _ctx = _AppContext()
         _ctx.db = db
         _ctx.config = config
+
+
+def set_event_store(event_store) -> None:
+    """Register the EventStore on the shared context (after init)."""
+    with _lock:
+        ctx = _ctx if _ctx is not None else _AppContext()
+        _ctx = ctx
+        ctx.event_store = event_store
 
 
 def get_context() -> _AppContext:

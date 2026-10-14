@@ -115,6 +115,12 @@ def get_pnl():
         return jsonify({"error": str(e)}), 500
 
 
+@portfolio_bp.route("/pnl-summary", methods=["GET"])
+def get_pnl_summary():
+    """Alias of /pnl — the dashboard frontend requests this exact path."""
+    return get_pnl()
+
+
 @portfolio_bp.route("/add", methods=["POST"])
 def add_transaction():
     """Add a portfolio transaction."""
@@ -151,5 +157,28 @@ def add_transaction():
             "price": price,
             "total": round(total, 2)
         })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@portfolio_bp.route("/delete-txn/<int:txn_id>", methods=["DELETE"])
+def delete_transaction(txn_id):
+    """Delete a portfolio transaction."""
+    try:
+        from core.context import get_context
+
+        ctx = get_context()
+        if not ctx.db:
+            return jsonify({"success": False, "error": "DB not available"}), 503
+
+        row = ctx.db._c().execute(
+            "DELETE FROM portfolio_transactions WHERE id = ?", (txn_id,)
+        ).rowcount
+        ctx.db._conn.commit()
+
+        if row == 0:
+            return jsonify({"success": False, "error": "Transaction not found"}), 404
+
+        return jsonify({"success": True, "deleted_id": txn_id})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500

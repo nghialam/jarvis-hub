@@ -317,27 +317,73 @@ def _fetch_chart_data(symbol: str):
 
 # --- Main fetch functions ---
 
+def _fetch_single_ticker(symbol: str, suffix: str = ".VN", timeout: int = 5):
+    """Fetch a single ticker from Yahoo Finance with per-call timeout and retry.
+
+    Returns dict with price data on success, None on complete failure.
+    The timeout is enforced so one slow request doesn't block the entire batch.
+    """
+    try:
+        if suffix and not symbol.endswith(suffix):
+            sym = f"{symbol}{suffix}"
+        else:
+            sym = symbol
+
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}"
+        r = _retry_request(url, params={}, timeout=timeout)
+        return _parse_yahoo_response(r)
+    except Exception as e:
+        print(f"[ERROR] Fetch failed for {symbol} (suffix={suffix}): {e}", file=sys.stderr)
+        return None
+
+
+def _fetch_with_fallback(symbol: str, suffix: str = ".VN", timeout: int = 5):
+    """Fetch a ticker trying multiple sources in order.
+
+    1. Yahoo Finance (primary)
+    2. vnstock3 (Vietnam stocks only)
+    Returns dict or None.
+    """
+    data = _fetch_single_ticker(symbol, suffix=suffix, timeout=timeout)
+    if data:
+        return data
+
+    # Fallback for VN stocks: try vnstock3
+    if suffix == ".VN" and not symbol.startswith("^"):
+        data = _fetch_vn_stock_via_vnstock3(symbol)
+        if data:
+            print(f"[OK] {symbol}: price={data['price']} (via vnstock3 fallback)")
+            return data
+
+    return None
+
+
 def fetch_vn_indices():
-    """Fetch VN-Index and major VN stocks."""
+    """Fetch VN-Index and major VN stocks in parallel."""
     symbols = {
         "^VNINDEX.VN": "VN-Index",
         "^HOSECAP": "HOSE Cap",
     }
-    results = {}
 
-    # Sequential with delay to avoid rate limiting
-    time.sleep(0.5)  # initial delay
-    for yahoo_sym, name in symbols.items():
-        data = _fetch_yahoo_price(yahoo_sym, is_vn=False)
-        if data:
-            results[name] = data
-        time.sleep(1)  # rate limit delay between requests
+    results = {}
+    # Parallel fetch with timeout + error handling
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = {executor.submit(_fetch_yahoo_price, sym, is_vn=False): name
+                   for sym, name in symbols.items()}
+        for future in as_completed(futures, timeout=15):
+            try:
+                name = futures[future]
+                data = future.result(timeout=5)
+                if data:
+                    results[name] = data
+            except Exception as e:
+                print(f"[WARN] VN index fetch failed: {e}", file=sys.stderr)
 
     return results
 
 
 def fetch_global_indices():
-    """Fetch global indices from Yahoo Finance."""
+    """Fetch global market indices in parallel from Yahoo Finance."""
     try:
         import core.config as config_mod
         config = config_mod.load_config() if hasattr(config_mod, "load_config") else {}
@@ -356,27 +402,41 @@ def fetch_global_indices():
     })
 
     results = {}
-    time.sleep(0.5)  # initial delay
-    for yahoo_sym, name in global_map.items():
-        data = _fetch_yahoo_price(yahoo_sym, is_vn=False)
-        if data:
-            results[name] = {**data, "symbol": yahoo_sym}
-        time.sleep(1.2)  # rate limit delay
+    # Parallel fetch: ~8 calls in parallel → ~1-2s total vs ~10s sequential
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = {executor.submit(_fetch_yahoo_price, sym, is_vn=False): name
+                   for sym, name in global_map.items()}
+        for future in as_completed(futures, timeout=20):
+            try:
+                name = futures[future]
+                data = future.result(timeout=5)
+                if data:
+                    yahoo_sym = [k for k, v in global_map.items() if v == name][0]
+                    results[name] = {**data, "symbol": yahoo_sym}
+            except Exception as e:
+                print(f"[WARN] Global index fetch failed: {e}", file=sys.stderr)
 
     return results
 
 
 def fetch_crypto():
-    """Fetch BTC, ETH, SOL prices."""
+    """Fetch BTC, ETH, SOL prices in parallel from Yahoo Finance."""
     crypto_map = {"BTC-USD": "BTC", "ETH-USD": "ETH", "SOL-USD": "SOL"}
     results = {}
 
-    time.sleep(0.5)
-    for yahoo_sym, name in crypto_map.items():
-        data = _fetch_yahoo_price(yahoo_sym, is_vn=False)
-        if data:
-            results[name] = {**data, "symbol": yahoo_sym}
-        time.sleep(1)
+    # Parallel: 3 calls → ~1s vs ~3s sequential
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = {executor.submit(_fetch_yahoo_price, sym, is_vn=False): name
+                   for sym, name in crypto_map.items()}
+        for future in as_completed(futures, timeout=10):
+            try:
+                name = futures[future]
+                data = future.result(timeout=5)
+                if data:
+                    yahoo_sym = [k for k, v in crypto_map.items() if v == name][0]
+                    results[name] = {**data, "symbol": yahoo_sym}
+            except Exception as e:
+                print(f"[WARN] Crypto fetch failed: {e}", file=sys.stderr)
 
     return results
 
@@ -415,12 +475,14 @@ def _fetch_all_task(name_fn):
 
 
 def fetch_all_overview():
-    """Fetch ALL market overview data.
+    """Fetch ALL market overview data in parallel.
 
-    Uses ThreadPoolExecutor to parallelize across independent data sources.
-    Each source (VN indices, global, crypto) still staggers internal calls
-    to avoid per-source Yahoo rate limits, but sources run concurrently
-    reducing total time from ~60s to ~15-20s.
+    All independent sources (VN indices, global, crypto, gold, oil, DXY)
+    are fetched concurrently via ThreadPoolExecutor, reducing total time
+    from ~30-45s (sequential) to ~3-6s (parallel).
+
+    Each individual fetch is wrapped with a 5s timeout so one slow request
+    doesn't block the entire batch. Failed sources return None gracefully.
     """
     results = {}
     errors = []
@@ -428,24 +490,26 @@ def fetch_all_overview():
     print("[FETCH] Starting full market overview fetch (parallel)...")
 
     try:
-        # Run all independent sources in parallel with max concurrent = 3
+        # ALL independent sources run in parallel — max 8 concurrent workers
         tasks = [("vn_indices", fetch_vn_indices),
-                  ("global_indices", fetch_global_indices),
-                  ("crypto", fetch_crypto),
-                  ("gold", fetch_gold),
-                  ("oil", fetch_oil),
-                  ("dxy", fetch_dxy)]
+                 ("global_indices", fetch_global_indices),
+                 ("crypto", fetch_crypto),
+                 ("gold", fetch_gold),
+                 ("oil", fetch_oil),
+                 ("dxy", fetch_dxy)]
 
-        # Sequential fetch to avoid concurrent.futures issues
-        for name, fn in tasks:
-            try:
-                data = fn()
-                if data:
-                    results[name] = data
-                    print(f"[OK] {name}: fetched")
-            except Exception as e:
-                errors.append(f"{name}: {e}")
-                print(f"[WARN] {name} failed: {e}")
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            futures = {executor.submit(fn): name for name, fn in tasks}
+            for future in as_completed(futures, timeout=60):
+                try:
+                    name = futures[future]
+                    data = future.result(timeout=15)
+                    if data:
+                        results[name] = data
+                        print(f"[OK] {name}: fetched")
+                except Exception as e:
+                    errors.append(f"{futures[future]}: {e}")
+                    print(f"[WARN] {futures[future]} failed: {e}")
 
     except Exception as e:
         print(f"[ERROR] Overview fetch error: {e}", file=sys.stderr)
@@ -460,25 +524,32 @@ def fetch_all_overview():
     return results
 
 def get_top_motions(symbols=None, limit=10):
-    """Get top movers from a list of VN stocks.
+    """Get top movers from a list of VN stocks — fetched in parallel.
 
     Uses vnstock3 first, then Yahoo Finance fallback with retry.
+    Each stock is queried concurrently; individual failures don't block others.
     """
     if not symbols:
         symbols = ["VIC", "VNM", "VCB", "HPG", "MSN", "FPT", "TCB", "MBB",
                      "HDB", "BID", "CTG", "STB", "ACB", "MWG"]
 
     results = []
-    for i, sym in enumerate(symbols):
-        # Stagger to avoid rate limiting
-        if i > 0:
-            time.sleep(1.5)
 
-        data = fetch_single_vn_stock(sym)
-        if data:
-            results.append(data)
-        else:
-            print(f"[SKIP] {sym}: no data available", file=sys.stderr)
+    # Parallel fetch: 14 stocks → ~2-3s vs ~20+ s sequential
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = {executor.submit(fetch_single_vn_stock, sym): sym
+                   for sym in symbols}
+        for future in as_completed(futures, timeout=60):
+            try:
+                sym = futures[future]
+                data = future.result(timeout=10)
+                if data:
+                    results.append(data)
+                else:
+                    print(f"[SKIP] {sym}: no data available", file=sys.stderr)
+            except Exception as e:
+                sym_label = futures.get(future, "unknown")
+                print(f"[WARN] {sym_label} get_top_motions failed: {e}", file=sys.stderr)
 
     # Sort by change_pct
     results.sort(key=lambda x: x.get("change_pct", 0), reverse=True)

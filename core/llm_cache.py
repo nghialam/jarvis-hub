@@ -1,5 +1,5 @@
 """
-llm_cache.py -- Thread-safe, TTL-based cache for LLM (Ollama) responses.
+llm_cache.py -- Thread-safe, TTL-based cache for LLM (Ollama) responses with LRU eviction and hot-key detection.
 
 Prevents redundant API calls when the same prompt/hash is requested multiple times
 within a short window (default 300s / 5 min). Used by:
@@ -8,6 +8,8 @@ within a short window (default 300s / 5 min). Used by:
 - core/market.py llm_due_diligence
 
 Circuit breaker pattern integrated to prevent hammering a failing Ollama instance.
+Hot-key detection: keys accessed 50+ times get extended TTL (1200s vs 300s).
+LRU eviction: when cache exceeds max_size, least-recently-accessed entry is removed.
 
 Usage:
     cache = LLMResponseCache(ttl=300, circuit_threshold=3)
@@ -21,6 +23,12 @@ from typing import Any, Callable, Optional
 
 # Sentinel object to distinguish cached None from actual miss
 _SENTINEL = object()
+
+# Hot key threshold — number of hits before a key enters the "hot tier" with longer TTL
+_HOT_KEY_THRESHOLD = 50
+
+# Hot tier TTL (seconds) vs default tier TTL
+_HOT_TTL = 1200
 
 
 class CircuitBreaker:
@@ -75,14 +83,25 @@ class CircuitBreaker:
 
 
 class LLMResponseCache:
-    """Thread-safe, TTL-based cache for LLM responses with circuit breaker."""
+    """Thread-safe, TTL-based cache for LLM responses with circuit breaker.
 
-    def __init__(self, ttl=300, max_size=None, circuit_threshold=3, recovery_window=60):
-        self._cache = {}
-        self._lock = threading.Lock()
+    Key features:
+    - Ordered dict (via _order list) for O(1) LRU eviction
+    - Hot-key detection: top hit-frequent keys get extended TTL (1200s vs 300s)
+    - Tracks evicted keys for debugging/monitoring
+    - Circuit breaker to prevent hammering a broken Ollama instance
+    """
+
+    def __init__(self, ttl=300, max_size=500, circuit_threshold=3, recovery_window=60):
+        self._cache = {}                           # key -> {"value": ..., "ts": float, "hits": int}
+        self._order = []                            # insertion/access order for LRU tracking
+        self._lock = threading.RLock()
         self._max_size = max_size
-        self._order = []
-        self._ttl = ttl
+        self._base_ttl = ttl                        # default (cold) TTL
+        self._hot_ttl = _HOT_TTL                    # hot tier TTL
+        self._hot_threshold = _HOT_KEY_THRESHOLD    # hit count to become "hot"
+        self._order_index = {}                      # key -> position in _order for O(1) access
+        self._evicted_keys = []                     # recent evictions (last 200)
         self._breaker = CircuitBreaker(
             failure_threshold=circuit_threshold,
             recovery_window=recovery_window,
@@ -93,40 +112,91 @@ class LLMResponseCache:
         """Create a short SHA-256 hash of the prompt for caching key."""
         return hashlib.sha256(prompt.encode()).hexdigest()[:16]
 
+    def _is_hot_key(self, key: str) -> bool:
+        """Check if a key qualifies for the hot tier."""
+        with self._lock:
+            entry = self._cache.get(key)
+            if not entry:
+                return False
+            return entry["hits"] >= self._hot_threshold
+
+    def _get_effective_ttl(self, key: str) -> int:
+        """Return TTL for the key — longer for hot keys."""
+        if self._is_hot_key(key):
+            return self._hot_ttl
+        return self._base_ttl
+
     # pylint: disable=unnecessary-pass
     def _get_cache_entry(self, key):
-        """Get cached entry if it exists and is fresh. Returns None on miss/expiry."""
+        """Get cached entry if it exists and is fresh. Returns None on miss/expiry.
+
+        On hit: moves the key to the end of _order (MRU) and increments hit counter.
+        """
         with self._lock:
             if key not in self._cache:
                 return None
             entry = self._cache[key]
-            entry_ttl = entry.get("ttl", self._ttl)
-            if time.time() - entry["ts"] < entry_ttl:
+            effective_ttl = self._get_effective_ttl(key)
+            if time.time() - entry["ts"] < effective_ttl:
+                # Move to end of order list (most recently used)
+                pos = self._order_index.get(key)
+                if pos is not None and pos != len(self._order) - 1:
+                    self._order.pop(pos)
+                    self._order.append(key)
+                    self._order_index[key] = len(self._order) - 1
                 entry["hits"] += 1
                 return entry
         # If we got here, the entry is expired
         with self._lock:
             if key in self._cache:
                 del self._cache[key]
+                pos = self._order_index.pop(key, None)
+                if pos is not None:
+                    # Shift all indices after the removed position
+                    for k in list(self._order_index.keys()):
+                        if self._order_index[k] > pos:
+                            self._order_index[k] -= 1
+                    self._order.pop(pos)
         return None
 
     def _store(self, key, value):
         """Thread-safe helper to store in cache with LRU eviction."""
-        if self._max_size is not None and len(self._order) >= self._max_size:
-            oldest = self._order[0]
-            self._order.pop(0)
-            if oldest in self._cache:
-                del self._cache[oldest]
-
+        evicted = []
         with self._lock:
-            # Remove key from order list if it exists there already (update case)
-            try:
-                self._order.remove(key)
-            except ValueError:
-                pass
-            entry = {"value": value, "ts": time.time(), "hits": 1, "ttl": self._ttl}
+            # If key already exists, update it (move to MRU end)
+            if key in self._order_index:
+                pos = self._order_index.pop(key)
+                self._order.pop(pos)
+                for k in list(self._order_index.keys()):
+                    if self._order_index[k] > pos:
+                        self._order_index[k] -= 1
+            else:
+                # Check if we need to evict LRU entries first
+                while len(self._order_index) >= (self._max_size or float('inf')):
+                    lru_key = self._order.pop(0)
+                    self._order_index.pop(lru_key, None)
+                    removed_val = self._cache.pop(lru_key, None)
+                    if removed_val is not None:
+                        evicted.append(lru_key)
+
+            entry = {
+                "value": value,
+                "ts": time.time(),
+                "hits": 1,
+                "ttl": self._base_ttl,
+            }
             self._cache[key] = entry
             self._order.append(key)
+            self._order_index[key] = len(self._order) - 1
+
+        # Record evictions outside the lock to reduce hold time
+        if evicted:
+            with self._lock:
+                self._evicted_keys.extend(evicted)
+                # Keep only last N evicted keys for debugging
+                keep = min(len(self._evicted_keys), 200)
+                if len(self._evicted_keys) > keep:
+                    self._evicted_keys = self._evicted_keys[-keep:]
 
     def get_or_call(self, prompt, call_func):
         """Get cached result if available and fresh, otherwise call the function.
@@ -173,35 +243,63 @@ class LLMResponseCache:
     def clear_expired(self):
         """Remove expired entries from cache. Returns count removed."""
         now = time.time()
+        evicted = []
         with self._lock:
             expired_keys = [
                 k for k, v in self._cache.items()
-                if now - v["ts"] >= v.get("ttl", self._ttl)
+                if now - v["ts"] >= self._get_effective_ttl(k)
             ]
             for k in expired_keys:
                 del self._cache[k]
-                try:
-                    self._order.remove(k)
-                except ValueError:
-                    pass
-            return len(expired_keys)
+                pos = self._order_index.pop(k, None)
+                if pos is not None:
+                    # Shift indices after removed position
+                    for key in list(self._order_index.keys()):
+                        if self._order_index[key] > pos:
+                            self._order_index[key] -= 1
+                    self._order.pop(pos)
+            evicted.extend(expired_keys)
+
+        if evicted:
+            with self._lock:
+                self._evicted_keys.extend(evicted[:50])
+                if len(self._evicted_keys) > 200:
+                    self._evicted_keys = self._evicted_keys[-200:]
+        return len(evicted)
 
     def get_stats(self):
-        """Return cache statistics (size, hit rate approx)."""
+        """Return cache statistics (size, hit rate, hot keys, evictions)."""
         with self._lock:
             now = time.time()
-            active = {
-                k: v for k, v in self._cache.items()
-                if now - v["ts"] < v.get("ttl", self._ttl)
-            }
+            active_entries = {}
+            expired_count = 0
+            hot_keys = []
+            for k, v in self._cache.items():
+                ttl = self._get_effective_ttl(k)
+                if now - v["ts"] < ttl:
+                    active_entries[k] = v
+                    if v["hits"] >= self._hot_threshold:
+                        hot_keys.append({"key": k, "hits": v["hits"], "ttl": ttl})
+                else:
+                    expired_count += 1
+
             return {
                 "total_entries": len(self._cache),
-                "active_entries": len(active),
-                "expired_entries": len(self._cache) - len(active),
-                "ttl_seconds": self._ttl,
+                "active_entries": len(active_entries),
+                "expired_entries": expired_count,
+                "hot_keys": sorted(hot_keys, key=lambda x: x["hits"], reverse=True)[:20],
+                "ttl_seconds": self._base_ttl,
+                "hot_key_ttl_seconds": self._hot_ttl,
                 "circuit_breaker_state": self._breaker.state,
                 "circuit_failures": self._breaker._failure_count,
+                "evicted_keys_last": list(self._evicted_keys[-20:]),
+                "eviction_count_recent": len(self._evicted_keys),
             }
+
+    def get_evicted_keys(self):
+        """Return list of recently evicted keys for debugging/monitoring."""
+        with self._lock:
+            return list(self._evicted_keys)
 
     @property
     def circuit_breaker(self):
@@ -210,9 +308,9 @@ class LLMResponseCache:
 
 
 # Global cache instance.
-# - 300s TTL (5 min) for successful responses.
-# - max_size=500 to cap memory growth and evict old entries via LRU.
-# - Circuit opens after 3 consecutive failures, recovers after 60s half-open probe.
+# - 300s TTL (5 min) default, 1200s (20 min) for hot keys
+# - max_size=500 with LRU eviction
+# - Circuit opens after 3 consecutive failures, recovers after 60s half-open probe
 llm_cache = LLMResponseCache(
     ttl=300, max_size=500, circuit_threshold=3, recovery_window=60,
 )

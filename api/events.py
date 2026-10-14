@@ -14,12 +14,35 @@ from flask import Blueprint, request, jsonify
 
 bp = Blueprint("events", __name__, url_prefix="/api/v1/events")
 
+def _event_store():
+    """Get the EventStore from the shared context (falls back to the
+    __main__ module global when the app is run as a script). Fixes the
+    `from app import event_store` double-import bug: when launched via
+    `python app.py`, the boot globals live in __main__, not re-imported `app`.
+    """
+    try:
+        from core.context import get_context
+        es = getattr(get_context(), "event_store", None)
+        if es is not None:
+            return es
+    except Exception:
+        pass
+    import sys
+    main = sys.modules.get("__main__")
+    if main is not None and getattr(main, "event_store", None) is not None:
+        return main.event_store
+    try:
+        import app
+        return app.event_store
+    except Exception:
+        return None
+
 
 @bp.route("/", methods=["GET"])
 def list_events():
     """Query events with filters."""
     try:
-        from app import event_store
+        event_store = _event_store()
         if event_store is None:
             return jsonify({"error": "EventStore not initialized"}), 503
 
@@ -62,7 +85,7 @@ def list_events():
 def event_stats():
     """Get event statistics for the last N hours."""
     try:
-        from app import event_store
+        event_store = _event_store()
         if event_store is None:
             return jsonify({"error": "EventStore not initialized"}), 503
 
@@ -77,7 +100,7 @@ def event_stats():
 def get_errors():
     """Get failed events."""
     try:
-        from app import event_store
+        event_store = _event_store()
         if event_store is None:
             return jsonify({"error": "EventStore not initialized"}), 503
 
@@ -97,7 +120,7 @@ def get_errors():
 def get_trace(trace_id):
     """Get all events in a trace (ordered by timestamp)."""
     try:
-        from app import event_store
+        event_store = _event_store()
         if event_store is None:
             return jsonify({"error": "EventStore not initialized"}), 503
 
@@ -116,7 +139,7 @@ def get_trace(trace_id):
 def archive_events():
     """Archive events older than N days."""
     try:
-        from app import event_store
+        event_store = _event_store()
         if event_store is None:
             return jsonify({"error": "EventStore not initialized"}), 503
 
@@ -136,7 +159,7 @@ def archive_events():
 def archive_single(event_id):
     """Archive a single event."""
     try:
-        from app import event_store
+        event_store = _event_store()
         if event_store is None:
             return jsonify({"error": "EventStore not initialized"}), 503
 

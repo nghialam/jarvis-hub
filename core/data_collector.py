@@ -174,17 +174,29 @@ def fetch_rss_feed(url, name, category, priority, seen_links, limit_per_source=5
 # --- DATA FETCHERS (TIER 1 - NO LLM) ---
 
 def fetch_rss_articles():
-    """Fetch RSS feeds from all sources."""
+    """Fetch RSS feeds from all sources in parallel."""
     articles = []
     seen_links = set()
 
-    for source in FEED_SOURCES:
-        fetched = fetch_rss_feed(
-            source["url"], source["name"],
-            source["category"], source["priority"],
-            seen_links, limit_per_source=5
-        )
-        articles.extend(fetched)
+    # Parallel: 3 feeds → ~1-2s vs ~3-6s sequential
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = {}
+        for source in FEED_SOURCES:
+            f = executor.submit(
+                fetch_rss_feed,
+                source["url"], source["name"],
+                source["category"], source["priority"],
+                seen_links, 5
+            )
+            futures[f] = source
+
+        for f in as_completed(futures, timeout=15):
+            try:
+                entries = f.result()
+                articles.extend(entries)
+            except Exception as e:
+                source_name = futures.get(f, {}).get("name", "unknown")
+                print(f"   [RSS] {source_name} FAILED: {e}")
 
     # Apply heuristic sentiment + categorization (no LLM)
     for a in articles:
@@ -319,33 +331,48 @@ def fetch_crypto(symbols=None):
 
 
 def fetch_commodity(target):
-    """Fetch gold or oil via Yahoo Finance."""
+    """Fetch gold or oil via Yahoo Finance, trying multiple symbols in parallel."""
     candidates = {"GOLD": ["XAU/USD", "GC=F", "GLD", "XAUUSD=X"],
                 "OIL":   ["CL=F", "BZ=F"]}
     sym_list = candidates.get(target, [target])
 
-    for sym in sym_list:
-        try:
-            data = fetch_json(f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}.VN")
-            if data and data.get("chart", {}).get("result"):
-                meta = data["chart"]["result"][0].get("meta", {})
-                price_raw = meta.get("regularMarketPrice")
-                 # vnstock returns VN prices in "nghin dong" - multiply by 1000 for actual VND
-                price = (float(price_raw) * 1000) if price_raw is not None else None
-                prev_close = meta.get("previousClose")
-                currency = meta.get("currency", "USD")
+    # Parallel: try all symbol candidates concurrently, return first success
+    with ThreadPoolExecutor(max_workers=len(sym_list)) as executor:
+        futures = {executor.submit(_fetch_one_commodity_sym, sym, target): sym
+                   for sym in sym_list}
+        for f in as_completed(futures, timeout=10):
+            try:
+                result = f.result()
+                if result is not None:
+                    return result
+            except Exception:
+                pass
+    return None
 
-                if price and prev_close and float(prev_close) > 0:
-                    return {
-                        "symbol": sym,
-                        "price": round(float(price), 2),
-                        "change_pct": round((float(price) - float(prev_close)) / float(prev_close) * 100, 2),
-                        "currency": currency,
-                        "type": target.lower(),
-                        "fetched_at": datetime.now().isoformat(),
-                    }
-        except Exception:
-            continue
+
+def _fetch_one_commodity_sym(sym, target):
+    """Helper: fetch one commodity symbol and parse. Returns parsed dict or None."""
+    try:
+        data = fetch_json(f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}.VN")
+        if data and data.get("chart", {}).get("result"):
+            meta = data["chart"]["result"][0].get("meta", {})
+            price_raw = meta.get("regularMarketPrice")
+             # vnstock returns VN prices in "nghin dong" - multiply by 1000 for actual VND
+            price = (float(price_raw) * 1000) if price_raw is not None else None
+            prev_close = meta.get("previousClose")
+            currency = meta.get("currency", "USD")
+
+            if price and prev_close and float(prev_close) > 0:
+                return {
+                    "symbol": sym,
+                    "price": round(float(price), 2),
+                    "change_pct": round((float(price) - float(prev_close)) / float(prev_close) * 100, 2),
+                    "currency": currency,
+                    "type": target.lower(),
+                    "fetched_at": datetime.now().isoformat(),
+                }
+    except Exception:
+        return None
     return None
 
 

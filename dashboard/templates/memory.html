@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jarvis Hub — Memory</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        :root { --primary: #2563eb; --success: #16a34a; --warning: #d97706; --danger: #dc2626; }
+        
+        .memory-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 16px 24px; background: var(--panel-bg); border-radius: 12px; margin-bottom: 20px;
+            border: 1px solid var(--border-color);
+        }
+        .memory-header h2 { margin: 0; font-size: 20px; color: var(--text-primary); }
+        .stats-row { display: flex; gap: 16px; margin-bottom: 20px; }
+        .stat-card { 
+            background: var(--panel-bg); border: 1px solid var(--border-color);
+            border-radius: 10px; padding: 16px 20px; flex: 1; text-align: center;
+        }
+        .stat-card .num { font-size: 28px; font-weight: 700; color: var(--accent); }
+        .stat-card .label { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+        
+        .search-bar { display: flex; gap: 10px; margin-bottom: 16px; }
+        .search-bar input { flex: 1; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); font-size: 14px; }
+        .search-bar button, .btn { padding: 10px 18px; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; }
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-primary:hover { opacity: 0.9; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-sm { padding: 6px 12px; font-size: 12px; }
+        
+        .filters { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+        .filter-btn { padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-secondary); cursor: pointer; font-size: 12px; }
+        .filter-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+        
+        #conclusions-list { display: flex; flex-direction: column; gap: 10px; max-height: 60vh; overflow-y: auto; }
+        .conclusion-item {
+            background: var(--panel-bg); border: 1px solid var(--border-color);
+            border-radius: 10px; padding: 14px 18px; transition: border-color 0.2s;
+        }
+        .conclusion-item:hover { border-color: var(--accent); }
+        .conclusion-item .meta { display: flex; gap: 10px; margin-bottom: 6px; font-size: 11px; color: var(--text-muted); }
+        .conclusion-item .meta span { display: inline-block; padding: 2px 8px; border-radius: 4px; background: rgba(37,99,235,0.1); color: var(--accent); font-weight: 500; }
+        .conclusion-item .content { font-size: 13px; line-height: 1.6; color: var(--text-primary); white-space: pre-wrap; word-break: break-word; }
+        .conclusion-item .actions { margin-top: 8px; display: flex; gap: 8px; justify-content: flex-end; }
+        
+        #add-form {
+            background: var(--panel-bg); border: 1px solid var(--border-color);
+            border-radius: 10px; padding: 20px; margin-bottom: 16px; display: none;
+        }
+        #add-form.active { display: block; }
+        #add-form label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; margin-top: 10px; }
+        #add-form textarea, #add-form select { width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); font-size: 13px; resize: vertical; min-height: 60px; }
+        #add-form .form-actions { margin-top: 12px; display: flex; gap: 8px; justify-content: flex-end; }
+        
+        .loading { text-align: center; padding: 40px; color: var(--text-muted); font-size: 14px; }
+        .empty-state { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+        .toast-msg { position: fixed; bottom: 20px; right: 20px; padding: 10px 20px; border-radius: 8px; color: white; font-size: 13px; z-index: 9999; opacity: 0; transition: opacity 0.3s; }
+        .toast-msg.show { opacity: 1; }
+        .toast-success { background: var(--success); }
+        .toast-error { background: var(--danger); }
+    </style>
+</head>
+<body>
+    <div style="max-width: 900px; margin: 0 auto; padding: 24px;">
+        <!-- Header -->
+        <div class="memory-header">
+            <h2>🧠 Persistent Memory Management</h2>
+            <button class="btn btn-primary" id="toggle-add-btn">+ Add Fact</button>
+        </div>
+
+        <!-- Stats Row -->
+        <div class="stats-row">
+            <div class="stat-card"><div class="num" id="stat-conclusions">—</div><div class="label">Total Facts</div></div>
+            <div class="stat-card"><div class="num" id="stat-sessions">—</div><div class="label">Sessions</div></div>
+            <div class="stat-card"><div class="num" id="stat-backend">✓</div><div class="label">Backend</div></div>
+        </div>
+
+        <!-- Filters -->
+        <div class="filters">
+            <button class="filter-btn active" data-filter="all">All</button>
+            <button class="filter-btn" data-filter="fact">Facts</button>
+            <button class="filter-btn" data-filter="lesson">Lessons</button>
+            <button class="filter-btn" data-filter="decision">Decisions</button>
+            <button class="filter-btn" data-filter="error">Errors</button>
+            <button class="filter-btn" data-filter="pending">Pending</button>
+        </div>
+
+        <!-- Search -->
+        <div class="search-bar">
+            <input type="text" id="search-input" placeholder="Search memory records...">
+            <button class="btn btn-primary" id="search-btn">Search</button>
+        </div>
+
+        <!-- Add Form -->
+        <div id="add-form">
+            <label>Type</label>
+            <select id="add-type"><option value="fact">Fact</option><option value="lesson">Lesson</option><option value="decision">Decision</option><option value="error">Error</option><option value="pending">Pending</option></select>
+            <label>Category / Tag (optional)</label>
+            <input type="text" id="add-category" placeholder="e.g. jarvis-hub, cron, vnstock" style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid var(--border-color); background:var(--bg-secondary); color:var(--text-primary); font-size:13px; margin-top:4px;">
+            <label>Content *</label>
+            <textarea id="add-content" placeholder="Enter the memory fact..."></textarea>
+            <div class="form-actions">
+                <button class="btn btn-sm" onclick="document.getElementById('add-form').classList.remove('active')">Cancel</button>
+                <button class="btn btn-primary btn-sm" id="save-btn">Save</button>
+            </div>
+        </div>
+
+        <!-- Results List -->
+        <div id="conclusions-list">
+            <div class="loading">Loading memory records...</div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast-msg" id="toast"></div>
+
+    <script>
+    const API = {
+        health: '/api/memory/health-check',
+        stats: '/api/memory/stats',
+        list: '/api/memory/conclusions', 
+        add: '/api/memory/conclusions/add',
+        sessionList: '/api/memory/sessions',
+    };
+
+    let currentFilter = 'all';
+    let searchQuery = '';
+
+    // Toast notification  
+    function toast(msg, isError=false) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.className = `toast-msg ${isError ? 'toast-error' : 'toast-success'} show`;
+        setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    async function loadStats() {
+        try {
+            const [sRes, hRes] = await Promise.all([
+                fetch(API.stats),
+                fetch(API.health)
+            ]);
+            if (sRes.ok) {
+                const s = await sRes.json();
+                document.getElementById('stat-conclusions').textContent = s.total_conclusions || 0;
+                document.getElementById('stat-sessions').textContent = s.active_sessions || 0;
+            }
+            if (hRes.ok) {
+                const h = await hRes.json();
+                document.getElementById('stat-backend').textContent = '✓';
+                document.getElementById('stat-backend').style.color = '#16a34a';
+            } else {
+                document.getElementById('stat-backend').textContent = '✗';
+                document.getElementById('stat-backend').style.color = '#dc2626';
+            }
+        } catch(e) {
+            console.error('Stats load failed', e);
+        }
+    }
+
+    async function loadConclusions() {
+        const list = document.getElementById('conclusions-list');
+        let url = `${API.list}?limit=100&peer=user`;
+        if (searchQuery) url += `&q=${encodeURIComponent(searchQuery)}`;
+        if (currentFilter !== 'all') url += `&query=${currentFilter}`;
+        
+        list.innerHTML = '<div class="loading">Loading...</div>';
+        
+        try {
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const data = await resp.json();
+            
+            if (!data.results || data.results.length === 0) {
+                list.innerHTML = '<div class="empty-state">No memory records found. Click "+ Add Fact" to add one.</div>';
+                return;
+            }
+
+            // NOTE: innerHTML here is safe — content comes from our own local memory API, not user-uploaded HTML
+            list.innerHTML = data.results.map(r => {
+                const bgColors = { fact:'#dbeafe', lesson:'#fef3c7', decision:'#e0e7ff', error:'#fee2e2', pending:'#d1fae5' };
+                const bg = bgColors[r.type] || '#f1f5f9';
+                return `<div class="conclusion-item">
+                    <div class="meta">
+                        <span style="background:${bg};color:#1e40af;">${r.type || 'fact'}</span>
+                        ${(r.category || '').includes('j') ? `<span>${r.category}</span>` : ''}
+                        ${r.similarity !== undefined && r.similarity > 0 ? `<span style="background:rgba(22,163,74,0.1);color:#16a34a;">${(r.similarity*100).toFixed(0)}% match</span>` : ''}
+                        <span>${r.created_at || ''}</span>
+                    </div>
+                    <div class="content">${(r.content || '').substring(0, 500)}</div>
+                    <div class="actions">
+                        <button class="btn btn-sm" onclick="editConclusion(${parseInt(r.id)})">✏️ Edit</button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteConclusion(${parseInt(r.id)})">🗑 Delete</button>
+                    </div>
+                </div>`;
+            }).join('');
+        } catch(e) {
+            list.innerHTML = `<div class="empty-state">Failed to load: ${e.message}</div>`;
+        }
+    }
+
+    function deleteConclusion(id) {
+        if (!confirm('Delete this memory?')) return;
+        fetch(`${API.list}/${id}`, { method: 'DELETE' }).then(r => r.json()).then(data => {
+            toast(data.status === 'ok' ? 'Deleted ✅' : `✗ ${data.message || data.error}`);
+            if (data.status === 'ok') loadConclusions();
+        });
+    }
+
+    function editConclusion(id) {
+        fetch(`/api/memory/conclusions/${id}`).then(r => r.json()).then(data => {
+            const rec = data.memory;
+            if (!rec) return toast('Not found', true);
+            document.getElementById('add-form').classList.add('active');
+            document.getElementById('add-type').value = rec.type || 'fact'; 
+            document.getElementById('add-category').value = rec.category || '';
+            document.getElementById('add-content').value = rec.content || '';
+            toast(`Editing ${rec.type || 'conclusion'} #${id}`);
+        });
+    }
+
+    // Event Listeners
+    document.getElementById('toggle-add-btn').addEventListener('click', () => {
+        document.getElementById('add-form').classList.toggle('active');
+    });
+
+    document.getElementById('save-btn').addEventListener('click', async () => {
+        const content = document.getElementById('add-content').value.trim();
+        if (!content || content.length < 5) { toast('Content needs 5+ chars', true); return; }
+        
+        const body = {
+            peer_id: 'user',
+            type: document.getElementById('add-type').value,
+            category: document.getElementById('add-category').value.trim(),
+            content: content
+        };
+        
+        try {
+            const r = await fetch(API.add, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+            const d = await r.json();
+            toast(d.status === 'ok' ? `Saved (ID: ${d.id.substring(0,8)}...)` : `✗ ${d.error || d.message}`);
+            document.getElementById('add-form').classList.remove('active');
+            if (d.status === 'ok') { document.getElementById('add-content').value = ''; loadConclusions(); loadStats(); }
+        } catch(e) { toast('Error: ' + e.message, true); }
+    });
+
+    document.getElementById('search-btn').addEventListener('click', () => {
+        searchQuery = document.getElementById('search-input').value.trim();
+        loadConclusions();
+    });
+
+    document.getElementById('search-input').addEventListener('keypress', (e) => { if (e.key === 'Enter') { searchQuery = e.target.value.trim(); loadConclusions(); }});
+
+    // Filter buttons
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentFilter = btn.dataset.filter;
+            loadConclusions();
+        });
+    });
+
+    // Initial load
+    loadStats();
+    loadConclusions();
+    
+    // Auto-refresh every 60s
+    setInterval(() => { loadStats(); }, 60000);
+    </script>
+</body>
+</html>

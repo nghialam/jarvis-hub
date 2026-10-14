@@ -290,6 +290,8 @@
             }
         }
     </style>
+    <!-- Chart.js for dashboard charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 </head>
 
 <body>
@@ -330,6 +332,10 @@
             <a href="/hub2/portfolio" class="nav-link">
                 <span class="nav-icon">💼</span>
                 <span>Portfolio</span>
+            </a>
+            <a href="/hub2/memory" class="nav-link">
+                <span class="nav-icon">🧠</span>
+                <span>Memory</span>
             </a>
             <div style="margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border-color);">
                 <div style="padding: 8px 12px; font-size: 12px; color: var(--text-muted);">
@@ -648,7 +654,7 @@
                 }
 
                 // Load market intel stats
-                const intelRes = await authFetch('/api/market-intel');
+                const intelRes = await authFetch('/api/market-intelligence/latest');
                 if (!intelRes) return;
                 const intelData = await intelRes.json();
                 if (intelData.sentiment) {
