@@ -242,7 +242,7 @@ def test_cron_scripts_exist():
     cron_scripts = [
         "/Users/nghialam/.hermes/scripts/daily-brief-data.py",
         "/Users/nghialam/.hermes/scripts/daily-stock-recs-data.py",
-        "/Users/nghialam/.hermes/scripts/jarvis-hub-regression-collect.py",
+        "/Users/nghialam/.hermes/scripts/jarvis-hub-regression-collect.sh",
     ]
     for script in cron_scripts:
         assert os.path.exists(script), f"Cron script not found: {script}"
@@ -253,7 +253,7 @@ def test_cron_script_syntax():
     cron_scripts = [
         "/Users/nghialam/.hermes/scripts/daily-brief-data.py",
         "/Users/nghialam/.hermes/scripts/daily-stock-recs-data.py",
-        "/Users/nghialam/.hermes/scripts/jarvis-hub-regression-collect.py",
+        "/Users/nghialam/.hermes/scripts/jarvis-hub-regression-collect.sh",
     ]
     for script in cron_scripts:
         with open(script) as f:
